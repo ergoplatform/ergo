@@ -8,7 +8,7 @@ import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ModePeerFeature
-import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2, ErgoSyncInfoV3}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
 import sigma.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
@@ -68,6 +68,17 @@ object ErgoCoreGenerators {
   lazy val ergoSyncInfoV2Gen: Gen[ErgoSyncInfoV2] = for {
     hds <- Gen.nonEmptyListOf(invalidHeaderGen).map(_.take(5))
   } yield ErgoSyncInfoV2(hds)
+
+  lazy val heightRangeGen: Gen[(Int, Int)] = for {
+    start <- Gen.choose(1, 500000)
+    len <- Gen.choose(0, 500000)
+  } yield (start, start + len)
+
+  lazy val ergoSyncInfoV3Gen: Gen[ErgoSyncInfoV3] = for {
+    hds <- Gen.nonEmptyListOf(invalidHeaderGen).map(_.take(5))
+    hRanges <- Gen.listOfN(3, heightRangeGen)
+    fbRanges <- Gen.listOfN(3, heightRangeGen)
+  } yield ErgoSyncInfoV3(hds, hRanges, fbRanges)
 
   lazy val digest32Gen: Gen[Digest32] = {
     val x = Digest32 @@ genBytes(32)

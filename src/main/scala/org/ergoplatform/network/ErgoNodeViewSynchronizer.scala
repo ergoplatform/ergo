@@ -5,7 +5,7 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
-import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2, ErgoSyncInfoV3, HeadersBasedSyncInfo}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -76,6 +76,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+
+  private var syncInfoV3CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV3)] = Option.empty
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -393,10 +395,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  private def getV3SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV3 = {
+    val headersHeight = history.headersHeight
+    syncInfoV3CacheByHeadersHeight
+      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+      .getOrElse {
+        val v3SyncInfo = history.syncInfoV3(full)
+        syncInfoV3CacheByHeadersHeight = Some(headersHeight -> v3SyncInfo)
+        v3SyncInfo
+      }
+  }
+
   /**
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
   def syncV2Supported(remote: ConnectedPeer): Boolean = SyncV2Filter.condition(remote)
+
+  /**
+    * Whether neighbour peer `remote` supports sync protocol V3.
+    */
+  def syncV3Supported(remote: ConnectedPeer): Boolean = SyncV3Filter.condition(remote)
 
   /**
     * Send synchronization statuses to neighbour peers
@@ -405,7 +423,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * some time (see syncStatusRefreshStable / syncStatusRefreshStable settings),
     * or peers with Unknown / Fork / Older statuses.
     *
-    * Method sends V1/V2 sync messages based on neighbour version.
+    * Method sends V1/V2/V3 sync messages based on neighbour version.
     *
     */
   protected def sendSync(history: ErgoHistory): Unit = {
@@ -415,8 +433,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       requireNipopowProof(history)
     } else {
       val peers = syncTracker.peersToSyncWith()
-      val (peersV2, peersV1) = peers.partition(p => syncV2Supported(p))
-      log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2")
+      val peersV1 = mutable.Buffer[ConnectedPeer]()
+      val peersV2 = mutable.Buffer[ConnectedPeer]()
+      val peersV3 = mutable.Buffer[ConnectedPeer]()
+
+      peers.foreach { peer =>
+        if (syncV3Supported(peer)) {
+          peersV3 += peer
+        } else if (syncV2Supported(peer)) {
+          peersV2 += peer
+        } else {
+          peersV1 += peer
+        }
+      }
+
+      log.debug(s"Syncing with ${peersV1.size} peers via sync v1, ${peersV2.size} peers via sync v2, ${peersV3.size} peers via sync v3")
       if (peersV1.nonEmpty) {
         val msg = Message(syncInfoSpec, Right(getV1SyncInfo(history)), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeers(peersV1))
@@ -425,6 +456,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         //todo: send only last header to peers which are equal or younger
         val v2SyncInfo = getV2SyncInfo(history, full = true)
         networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+      }
+      if (peersV3.nonEmpty) {
+        //todo: send only last header to peers which are equal or younger
+        val v3SyncInfo = getV3SyncInfo(history, full = true)
+        networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v3SyncInfo), None), SendToPeers(peersV3))
       }
     }
   }
@@ -458,7 +494,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.debug(s"Processing sync from $remote")
       syncInfo match {
         case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
-        case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
+        case otherVersion: HeadersBasedSyncInfo => processSyncV2(hr, otherVersion, remote)
       }
     } else {
       log.debug(s"Spammy sync detected from $remote")
@@ -492,14 +528,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (headerIds.nonEmpty) {
           val maxHeadersToDownload = deliveryTracker.headersToDownload
           log.debug(s"Requesting $maxHeadersToDownload headers from older peers after getting sync info from $remote")
+          val branchingHeight = ids.drop(headerIds.length).headOption.flatMap(hr.heightOf).getOrElse(hr.headersHeight)
+          val orderedHeaderIds = headerIds.reverse
+          val headerHeights: Map[ModifierId, Height] = orderedHeaderIds.zipWithIndex.map {
+            case (hId, idx) => hId -> (branchingHeight + idx + 1)
+          }.toMap
           requestDownload(
             maxHeadersToDownload,
             minHeadersPerBucket,
-            maxHeadersPerBucket
+            maxHeadersPerBucket,
+            canServe = (peer, _, mid) =>
+              headerHeights.get(mid).forall(h => canPeerServeHeader(peer, h))
           )(Option(getPeersForDownloadingHeaders(remote))) { howManyPerType =>
             val modifierIds =
-              headerIds
-                .reverse
+              orderedHeaderIds
                 .filter(mid => downloadRequired(hr)(Header.modifierTypeId, mid))
                 .take(howManyPerType)
             Map(Header.modifierTypeId -> modifierIds)
@@ -519,7 +561,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * Processing sync V2 message `syncInfo` got from neighbour peer `remote` (supporting sync v2)
     */
-  protected def processSyncV2(hr: ErgoHistory, syncInfo: ErgoSyncInfoV2, remote: ConnectedPeer): Unit = {
+  protected def processSyncV2(hr: ErgoHistory, syncInfo: HeadersBasedSyncInfo, remote: ConnectedPeer): Unit = {
     val (status, syncSendNeeded) = syncTracker.updateStatus(remote, syncInfo, hr)
 
     status match {
@@ -557,7 +599,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     if (syncSendNeeded) {
-      val ownSyncInfo = getV2SyncInfo(hr, full = true)
+      val ownSyncInfo = syncInfo match {
+        case _: ErgoSyncInfoV3 => getV3SyncInfo(hr, full = true)
+        case _ if syncV3Supported(remote) => getV3SyncInfo(hr, full = true)
+        case _ => getV2SyncInfo(hr, full = true)
+      }
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
@@ -574,7 +620,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     *
     * @param syncInfo other's node sync info
     */
-  private def applyValidContinuationHeaderV2(syncInfo: ErgoSyncInfoV2,
+  private def applyValidContinuationHeaderV2(syncInfo: HeadersBasedSyncInfo,
                                              history: ErgoHistory,
                                              peer: ConnectedPeer): Unit = {
     history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
@@ -595,7 +641,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         modifiersToDownload.foreach {
           case (modifierTypeId, modifierId) =>
             if (deliveryTracker.status(modifierId, modifierTypeId, Seq(history)) == ModifiersStatus.Unknown) {
-              requestBlockSection(modifierTypeId, Seq(modifierId), peer)
+              val targetPeer = if (canPeerServeBlock(peer, continuationHeader.height)) {
+                peer
+              } else {
+                val candidates = getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq.empty)
+                  .filter(p => canPeerServeModifier(history)(p, modifierTypeId, modifierId))
+                val preferred = candidates.filter(p => preferPeerForModifier(history)(p, modifierTypeId, modifierId))
+                preferred.headOption.orElse(candidates.headOption).getOrElse(peer)
+              }
+              requestBlockSection(modifierTypeId, Seq(modifierId), targetPeer)
             }
         }
       } else {
@@ -611,9 +665,56 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @param callingPeer fallback peer that can be used to download headers, it must be Older
     * @return available peers to download headers from together with the state/origin of the peer
     */
+  private def canPeerServeHeader(peer: ConnectedPeer, height: Height): Boolean = {
+    syncTracker.statuses.get(peer) match {
+      case Some(status) => status.hasHeaderAt(height)
+      case None => HeadersDownloadFilter.condition(peer)
+    }
+  }
+
+  private def canPeerServeBlock(peer: ConnectedPeer, height: Height): Boolean = {
+    syncTracker.statuses.get(peer) match {
+      case Some(status) => status.hasFullBlockAt(height)
+      case None => BlockSectionsDownloadFilter.condition(peer)
+    }
+  }
+
+  private def canPeerServeModifier(hr: ErgoHistory)
+                                  (peer: ConnectedPeer,
+                                   modifierTypeId: NetworkObjectTypeId.Value,
+                                   modifierId: ModifierId): Boolean = {
+    hr.modifierHeightAndHeaderById(modifierTypeId, modifierId) match {
+      case Some((h, headerId)) =>
+        val hasAtHeight = if (modifierTypeId == Header.modifierTypeId) {
+          canPeerServeHeader(peer, h)
+        } else {
+          canPeerServeBlock(peer, h)
+        }
+        val branchConflict = syncTracker.statuses.get(peer).exists(_.conflictsWithHeader(h, headerId))
+        hasAtHeight && !branchConflict
+      case None =>
+        true
+    }
+  }
+
+  private def preferPeerForModifier(hr: ErgoHistory)
+                                   (peer: ConnectedPeer,
+                                    modifierTypeId: NetworkObjectTypeId.Value,
+                                    modifierId: ModifierId): Boolean = {
+    hr.modifierHeightAndHeaderById(modifierTypeId, modifierId) match {
+      case Some((_, headerId)) =>
+        syncTracker.statuses.get(peer).exists(_.knowsHeader(headerId))
+      case None =>
+        false
+    }
+  }
+
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
     val nonFiltered: Iterable[ConnectedPeer] = syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
-    HeadersDownloadFilter.filter(nonFiltered)
+    nonFiltered.filter { peer =>
+      HeadersDownloadFilter.condition(peer) ||
+        syncTracker.statuses.get(peer).exists(_.storedHeaders.nonEmpty)
+    }
   }
 
   /**
@@ -628,7 +729,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       .orElse {
         Option(peersByStatus.getOrElse(Unknown, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Fork, mutable.WrappedArray.empty))
           .filter(_.nonEmpty)
-      }.map(BlockSectionsDownloadFilter.filter)
+      }.map { peers =>
+        peers.filter { peer =>
+          BlockSectionsDownloadFilter.condition(peer) ||
+            syncTracker.statuses.get(peer).exists(_.storedFullblocks.nonEmpty)
+        }
+      }
   }
 
   /**
@@ -701,7 +807,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         requestDownload(
           maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
-          maxModifiersPerBucket
+          maxModifiersPerBucket,
+          canServe = canPeerServeModifier(historyReader),
+          preferPeer = preferPeerForModifier(historyReader)
         )(getPeersForDownloadingBlocks) { _ =>
           // leave block section ids only not touched before
           modifiersToFetch.flatMap { case (tid, mids) =>
@@ -729,7 +837,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @param getPeersOpt           optionally get peers to download from, all peers have the same PeerSyncState
     * @param fetchMax              returns IDs by type; may use the requested count as a per-type bound
     */
-  protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
+  protected def requestDownload(maxModifiers: Int,
+                                minModifiersPerBucket: Int,
+                                maxModifiersPerBucket: Int,
+                                canServe: (ConnectedPeer, NetworkObjectTypeId.Value, ModifierId) => Boolean = (_, _, _) => true,
+                                preferPeer: (ConnectedPeer, NetworkObjectTypeId.Value, ModifierId) => Boolean = (_, _, _) => false)
                                (getPeersOpt: => Option[Iterable[ConnectedPeer]])
                                (fetchMax: Int => Map[NetworkObjectTypeId.Value, Seq[ModifierId]]): Unit = {
     getPeersOpt match {
@@ -746,7 +858,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // to start downloading UTXO set snapshots
           requestSnapshotsInfo()
         } else {
-          val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
+          val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched, canServe, preferPeer)
           // collect and log useful downloading progress information, don't worry it does not run frequently
           modifiersByBucket.headOption.foreach { _ =>
             modifiersByBucket
@@ -1435,7 +1547,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               }
              } else {
                // randomly choose a peer for another block sections download attempt
-              val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
+              val rawCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
                 getPeersForDownloadingHeaders(peer).toSeq
               } else {
                 // the peer that did not deliver may not have the section, so it is asked again only when it is the
@@ -1444,6 +1556,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 val otherPeers = blockPeers.filterNot(_ == peer)
                 if (otherPeers.nonEmpty) otherPeers else blockPeers
               }
+              val servableCandidates = rawCandidates.filter(p => canPeerServeModifier(hr)(p, modifierTypeId, modifierId))
+              val eligibleCandidates = if (servableCandidates.nonEmpty) servableCandidates else rawCandidates
+              val preferredCandidates = eligibleCandidates.filter(p => preferPeerForModifier(hr)(p, modifierTypeId, modifierId))
+              val newPeerCandidates = if (preferredCandidates.nonEmpty) preferredCandidates else eligibleCandidates
               val newPeer = if (newPeerCandidates.isEmpty) {
                 if (checksDone > FallbackToEqualPeerThreshold) {
                   // after many failed attempts, try Equal peers instead of the same peer
@@ -1611,7 +1727,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           requestDownload(
             maxModifiers = deliveryTracker.modifiersToDownload,
             minModifiersPerBucket,
-            maxModifiersPerBucket
+            maxModifiersPerBucket,
+            canServe = canPeerServeModifier(historyReader),
+            preferPeer = preferPeerForModifier(historyReader)
           )(getPeersForDownloadingBlocks) { howManyPerType =>
             historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
           }

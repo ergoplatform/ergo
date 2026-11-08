@@ -2,11 +2,11 @@ package org.ergoplatform.network
 
 
 import org.ergoplatform.consensus.{Fork, Older, PeerChainStatus, Unknown}
-import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV3, HeadersBasedSyncInfo}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.NetworkSettings
 import scorex.core.network.ConnectedPeer
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -71,9 +71,26 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
     val height = syncInfo match {
       case _: ErgoSyncInfoV1 => None
-      case sv2: ErgoSyncInfoV2 => sv2.height
+      case otherVersion: HeadersBasedSyncInfo => otherVersion.height
     }
-    updateStatus(peer, status, height)
+    val peerHeaders = syncInfo match {
+      case v3: ErgoSyncInfoV3 => v3.headersRanges
+      case _ => Seq.empty
+    }
+    val peerFullBlocks = syncInfo match {
+      case v3: ErgoSyncInfoV3 => v3.fullBlocksRanges
+      case _ => Seq.empty
+    }
+    val peerLastHeaderIds: Seq[ModifierId] = syncInfo match {
+      case v1: ErgoSyncInfoV1 => v1.lastHeaderIds
+      case hb: HeadersBasedSyncInfo => hb.lastHeaders.map(_.id)
+    }
+    val peerHeaderIdsByHeight: Map[Height, ModifierId] = syncInfo match {
+      case hb: HeadersBasedSyncInfo => hb.lastHeaders.map(h => h.height -> h.id).toMap
+      case v1: ErgoSyncInfoV1 =>
+        v1.lastHeaderIds.flatMap(id => hr.heightOf(id).map(h => h -> id)).toMap
+    }
+    updateStatus(peer, status, height, peerHeaders, peerFullBlocks, peerLastHeaderIds, peerHeaderIdsByHeight)
 
     val syncSendNeeded = (oldStatus != status) || notSyncedOrOutdated(peer) || status == Older || status == Fork
 
@@ -82,13 +99,34 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
   def updateStatus(peer: ConnectedPeer,
                    status: PeerChainStatus,
-                   height: Option[Height]): Unit = {
+                   height: Option[Height],
+                   peerHeaders: Seq[(Height, Height)] = Seq.empty,
+                   peerFullblocks: Seq[(Height, Height)] = Seq.empty,
+                   peerLastHeaderIds: Seq[ModifierId] = Seq.empty,
+                   peerHeaderIdsByHeight: Map[Height, ModifierId] = Map.empty): Unit = {
     val seniorsBefore = numOfSeniors()
     statuses.adjust(peer){
       case None =>
-        ErgoPeerStatus(peer, status, height.getOrElse(EmptyHistoryHeight), None, None)
+        ErgoPeerStatus(
+          peer,
+          status,
+          height.getOrElse(EmptyHistoryHeight),
+          peerHeaders,
+          peerFullblocks,
+          None,
+          None,
+          peerLastHeaderIds,
+          peerHeaderIdsByHeight
+        )
       case Some(existingPeer) =>
-        existingPeer.copy(status = status, height = height.getOrElse(existingPeer.height))
+        existingPeer.copy(
+          status = status,
+          headersHeight = height.getOrElse(existingPeer.headersHeight),
+          storedHeaders = if (peerHeaders.nonEmpty) peerHeaders else existingPeer.storedHeaders,
+          storedFullblocks = if (peerFullblocks.nonEmpty) peerFullblocks else existingPeer.storedFullblocks,
+          lastHeaderIds = if (peerLastHeaderIds.nonEmpty) peerLastHeaderIds else existingPeer.lastHeaderIds,
+          headerIdsByHeight = if (peerHeaderIdsByHeight.nonEmpty) peerHeaderIdsByHeight else existingPeer.headerIdsByHeight
+        )
     }
 
     val seniorsAfter = numOfSeniors()
@@ -160,7 +198,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
 
   def maxHeight(): Option[Int] = {
     if (statuses.nonEmpty) {
-      Some(statuses.maxBy(_._2.height)._2.height)
+      Some(statuses.maxBy(_._2.headersHeight)._2.headersHeight)
     } else {
       None
     }
@@ -210,7 +248,7 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
       case (peer, status) =>
         (peer.connectionId.remoteAddress, statuses.get(peer), status.lastSyncSentTime.map(now - _))
     }.map { case (address, status, millisSinceLastSync) =>
-      s"$address, height: ${status.map(_.height)}, status: ${status.map(_.status)}, lastSync: $millisSinceLastSync ms ago"
+      s"$address, height: ${status.map(_.headersHeight)}, status: ${status.map(_.status)}, lastSync: $millisSinceLastSync ms ago"
     }.mkString("\n")
   }
 

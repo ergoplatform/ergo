@@ -191,6 +191,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
+  /** Peers from which a snapshot metadata reply is currently expected. */
+  private val requestedSnapshotsInfoPeers = mutable.Set[ConnectedPeer]()
+
   /**
    * Peers provided nipopow poofs
    */
@@ -670,6 +673,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val peers = UtxoSetNetworkingFilter.filter(syncTracker.knownPeers()).toSeq
     val peersCount = peers.size
     if (peersCount >= MinSnapshots) {
+      requestedSnapshotsInfoPeers ++= peers
       networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
     } else {
       log.warn(s"Less UTXO-snapshot supporting peers found than required mininum ($peersCount < $MinSnapshots)")
@@ -1018,6 +1022,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def processSnapshotsInfo(hr: ErgoHistory,
                                    snapshotsInfo: SnapshotsInfo,
                                    remote: ConnectedPeer): Unit = {
+    if (!settings.nodeSettings.utxoSettings.utxoBootstrap ||
+        hr.fullBlockHeight != 0 ||
+        !requestedSnapshotsInfoPeers.remove(remote)) return
+
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
       val encodedManifestId = ModifierId @@ Algos.encode(manifestId)
       val ownId = hr.bestHeaderAtHeight(height).map(_.stateRoot).map(stateDigest => splitDigest(stateDigest)._1)
@@ -1505,6 +1513,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
       txsInProcessing -= connectedPeer
+      requestedSnapshotsInfoPeers -= connectedPeer
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -1544,6 +1553,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Number of the peer's transactions in processing, see `txsInProcessing`
     */
   private def txsInProcessingOf(peer: ConnectedPeer): Int = txsInProcessing.get(peer).map(_.size).getOrElse(0)
+
+  private[network] def snapshotOfferCount: Int = availableManifests.size
+
+  private[network] def pendingSnapshotInfoCount: Int = requestedSnapshotsInfoPeers.size
 
   // add transaction id to the table of declined transactions, keeping the table size bounded
   private def addDeclined(id: ModifierId): Unit = {

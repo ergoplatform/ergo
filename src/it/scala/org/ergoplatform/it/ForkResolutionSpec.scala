@@ -19,8 +19,11 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
 
   val nodesQty: Int = 4
 
-  // Sync V2 includes a header 16 below a forked tip; keep that anchor common.
-  val commonChainLength: Int = 16
+  // sync v2 finds a common point only through the headers 0, 16, 128 and 512 blocks
+  // below a node's tip (`ErgoHistoryReader.FullV2SyncOffsets`). An isolated follower can
+  // mine 20 blocks or more, past the 16 offset, so the common chain is at least 129
+  // blocks long: then the header 128 below a forked tip exists and is common
+  val commonChainLength: Int = 129
   val forkLength: Int = 5
   val syncLength: Int = 15
 
@@ -39,6 +42,11 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
     .map(_.withFallback(allowLocalConfig).withFallback(miningTimingConfig))
 
   val minerConfig: Config = nodeConfigs.head
+
+  // node01 mines the common chain alone, so it can poll fast, as in LongChainSyncSpec
+  val commonChainMinerConfig: Config =
+    internalMinerPollingIntervalConfig(100).withFallback(minerConfig)
+
   val onlineSyncNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)
     .map(_.withFallback(nonGeneratingPeerConfig))
   val offlineMiningNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)
@@ -66,16 +74,17 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
   }
 
   // Testing scenario:
-  // 1. Mine a common chain, then stop its miner and wait for all nodes to apply the same tip;
+  // 1. Mine the common chain, stop its miner and wait for a fully applied common tip;
   // 2. Stop all nodes, clear peers and restart with isolated mining;
-  // 3. Confirm each node mines a distinct fork without connections;
-  // 4. Restart with known peers, then check convergence on the selected fork;
+  // 3. Confirm four distinct forks without connections;
+  // 4. Restart with known peers and check convergence on the selected fork;
   it should "Fork resolution after isolated mining" in {
 
     log.info(minerConfig.toString)
     onlineSyncNodesConfig.foreach(x => log.info(x.toString))
 
-    val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineSyncNodesConfig)
+    val nodes: List[Node] =
+      startNodesWithBinds(commonChainMinerConfig +: onlineSyncNodesConfig)
 
     val result = Async.async {
       val initMaxHeight = Async.await(Future.traverse(nodes)(_.fullHeight).map(_.max))

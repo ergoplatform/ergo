@@ -107,7 +107,7 @@ class WalletTransactionConfirmationsSpec
         Some(false)
       ))).response.get.scanId
 
-      val mempool = ErgoMemPool.empty(settings).put(Seq(UnconfirmedTransaction(tx3, None)))
+      val mempool = ErgoMemPool.empty(w.settings).put(Seq(UnconfirmedTransaction(tx3, None)))
       wallet.walletActor ! ChangedMempool(mempool)
       eventually {
         val visible = await(wallet.filteredScanTransactions(List(scanId), 0, Int.MaxValue,

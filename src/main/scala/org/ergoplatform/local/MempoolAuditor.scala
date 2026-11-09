@@ -13,10 +13,13 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.RecheckMempool
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.network.message.{InvData, InvSpec, Message}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.RecheckedTransactions
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
+import java.util.UUID
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.util.Try
 
 /**
   * Controls mempool cleanup workflow. Watches NodeView events and delegates
@@ -52,9 +55,10 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
 
   private var poolReaderOpt: Option[ErgoMemPoolReader] = None
   private var stateReaderOpt: Option[ErgoStateReader] = None
+  private var pending: Option[RecheckMempool] = None
 
   private val worker: ActorRef =
-    context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settings.nodeSettings)))
+    context.actorOf(Props(new CleanupWorker(settings.nodeSettings)))
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[RecheckMempool])
@@ -63,26 +67,33 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   override def receive: Receive = awaiting
 
   private def awaiting: Receive = {
-    case RecheckMempool(st: UtxoStateReader, mp: ErgoMemPoolReader) =>
-      stateReaderOpt = Some(st)
-      poolReaderOpt = Some(mp)
-      initiateCleanup(st, mp)
+    case request: RecheckMempool => initiateCleanup(request)
+    case _: CleanupDone => // a completion from an obsolete worker run
   }
 
-  private def working: Receive = {
-    case CleanupDone =>
-      log.info("Cleanup done. Switching to awaiting mode")
-      //rebroadcast transactions
-      rebroadcastTransactions()
+  private def working(jobId: UUID): Receive = {
+    case CleanupDone(`jobId`, result) =>
+      result.foreach(nodeViewHolderRef ! _)
       context become awaiting
-
-    case _ => // ignore other triggers until work is done
+      pending match {
+        case Some(request) => initiateCleanup(request)
+        case None => result.foreach { _ => rebroadcastTransactions() }
+      }
+    case request: RecheckMempool => pending = Some(request)
+    case _: CleanupDone => // a stale completion must not release the current job
   }
 
-  private def initiateCleanup(validator: UtxoStateReader, mempool: ErgoMemPoolReader): Unit = {
+  protected def dispatchCleanup(jobId: UUID, request: RecheckMempool): Unit =
+    worker ! RunCleanup(jobId, request)
+
+  private def initiateCleanup(request: RecheckMempool): Unit = {
     log.info("Initiating mempool cleanup")
-    worker ! RunCleanup(validator, mempool)
-    context become working // ignore other triggers until work is done
+    stateReaderOpt = Some(request.state)
+    poolReaderOpt = Some(request.mempool)
+    pending = None
+    val jobId = UUID.randomUUID()
+    dispatchCleanup(jobId, request)
+    context become working(jobId)
   }
 
   private def broadcastTx(unconfirmedTx: UnconfirmedTransaction): Unit = {
@@ -147,7 +158,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
 
 object MempoolAuditor {
 
-  case object CleanupDone
+  case class CleanupDone(jobId: UUID, result: Try[RecheckedTransactions])
 
   /**
     * How deep the ancestor walk in `withAncestorsParentsFirst` follows in-pool parents (the same bound the pool puts

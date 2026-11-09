@@ -118,7 +118,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
 
 
-    auditor ! RecheckMempool(us, new FakeMempool(txs))
+    auditor ! RecheckMempool(us, new FakeMempool(txs), java.util.UUID.randomUUID())
 
     probe.fishForMessage(3.seconds) {
       case _: SendToNetwork => true
@@ -153,7 +153,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
       val roundSettings =
         settingsToTest.copy(nodeSettings = settingsToTest.nodeSettings.copy(rebroadcastCount = rebroadcastCount))
       val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, roundSettings))
-      auditor ! RecheckMempool(us, new FakeMempool(pool.map(UnconfirmedTransaction(_, None))))
+      auditor ! RecheckMempool(us, new FakeMempool(pool.map(UnconfirmedTransaction(_, None))), java.util.UUID.randomUUID())
       val announcements: PartialFunction[Any, Seq[ModifierId]] = {
         case SendToNetwork(msg, _) => msg.input.toOption.toSeq.flatMap {
           case inv: InvData => inv.ids

@@ -596,7 +596,9 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
             case Some(existing) =>
               existing.findAndModBox(iEb.globalIndex, history)
               existing
-            case None => IndexedContractTemplate(templateId).addBox(iEb) // as a received box, new template
+            case None =>
+              log.warn(s"No template record for restored box ${bytesToId(iEb.box.id)}: starting a partial record under ${templateId}")
+              IndexedContractTemplate(templateId).addBox(iEb) // as a received box, new template
           }
 
           val rentRow: Array[ExtraIndex] =

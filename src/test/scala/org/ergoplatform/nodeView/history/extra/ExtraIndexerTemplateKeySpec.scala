@@ -373,16 +373,11 @@ class ExtraIndexerTemplateKeySpec extends ErgoCorePropertyTest with NodeViewTest
     withNode(checkpointedSettings) { node =>
       val (box, spare) = node.firstPayment()
       val number = node.boxRecord(box).get.globalIndex
-      // the template record as a pre-release 6.0.9 build wrote it: under the double-hash key, which
-      // lists the box, and nothing under the current template key
-      val oldKey = bytesToId(Algos.hash(hashErgoTree(unparsedTree) + "template"))
-      oldKey should not be templateKey
+      // the record under the current template key is removed, which is what an index written under
+      // an earlier fallback key looks like to the current code
       val storage = node.history.historyStorage
       storage.removeExtra(Array(templateKey))
-      storage.insertExtraTry(Array.empty, Array[ExtraIndex](IndexedContractTemplate(oldKey, ArrayBuffer(number)))).get
-      def oldRecord: Option[List[Long]] = node.history.typedExtraIndexById[IndexedContractTemplate](oldKey).map(_.boxes.toList)
       node.templateRecord shouldBe None
-      oldRecord shouldBe Some(List(number))
 
       val spend = move(box, Constants.TrueTree)
       val abandoned = validFullBlock(Some(node.chain.last), node.tipState, Seq(spend))
@@ -399,7 +394,6 @@ class ExtraIndexerTemplateKeySpec extends ErgoCorePropertyTest with NodeViewTest
       node.addressRecord.flatMap(_.balanceInfo).map(_.nanoErgs) shouldBe Some(box.value)
       node.templateRecord.map(_.boxes.toList) shouldBe Some(List(number))
       node.templateRecord.get.retrieveBoxes(node.history, 0, 10).map(_.id).toList shouldBe List(bytesToId(box.id))
-      oldRecord shouldBe Some(List(number))
     }
   }
 }

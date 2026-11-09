@@ -14,7 +14,13 @@ class ErgoModifiersCache(override val maxSize: Int) extends ModifiersCache with 
   override def findCandidateKey(history: ErgoHistory): Option[K] = {
     def tryToApply(k: K, v: BlockSection): Boolean = {
       history.applicableTry(v) match {
-        case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
+        case Failure(e: MalformedModifierError) if history.contains(v.id) =>
+          // already in history (e.g. stored from another source after the synchronizer passed this copy): a duplicate,
+          // not an invalid modifier. Any fatal rule is matched on purpose, as in `validateAndSetStatus`
+          log.info(s"Modifier ${v.encodedId} is already in history, removing its copy from cache: ${e.getMessage}")
+          remove(k)
+          false
+        case Failure(e: MalformedModifierError) =>
           log.warn(s"Modifier ${v.encodedId} is permanently invalid and will be removed from cache", e)
           remove(k)
           false

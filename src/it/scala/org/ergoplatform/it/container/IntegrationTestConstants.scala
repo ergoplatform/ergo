@@ -37,11 +37,6 @@ trait IntegrationTestConstants {
     previousNode map { node => knownPeersConfig(Seq(node.nodeInfo)) }
   }
 
-  // still dials the peers kept in the node's peer database, see `noConnectionsConfig`
-  def isolatedPeersConfig: ExtraConfig = { (_, _) =>
-    Some(knownPeersConfig(Seq.empty))
-  }
-
   // An empty `knownPeers` does not stop a node from dialing the peers in its peer
   // database. With no connection slots a node neither dials nor accepts a peer.
   def noConnectionsConfig: ExtraConfig = { (_, _) =>

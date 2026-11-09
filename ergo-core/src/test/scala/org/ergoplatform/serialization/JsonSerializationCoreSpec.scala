@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
 import org.ergoplatform.http.api.ApiEncoderOption.{Detalization, ShowDetails}
+import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -62,6 +63,17 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
       val parsedSecret = json.as[DhtSecretKey].toOption.get
       parsedSecret shouldBe wrappedSecret
     }
+  }
+
+  property("V2 mining solution decoder accepts nonce-only JSON") {
+    val nonce = Array[Byte](1, 2, 3, 4, 5, 6, 7, 8)
+    val request = Json.obj("n" -> Algos.encode(nonce).asJson)
+    val decoded = request.as[AutolykosSolution].toOption.get
+
+    decoded.n.toIndexedSeq shouldBe nonce.toIndexedSeq
+    decoded.pk shouldBe AutolykosSolution.pkForV2
+    decoded.w shouldBe AutolykosSolution.wForV2
+    decoded.d shouldBe AutolykosSolution.dForV2
   }
 
   property("secret proof decoder should reject invalid hex without throwing") {

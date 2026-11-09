@@ -22,6 +22,9 @@ object VotingTargets {
 
   val empty: VotingTargets = VotingTargets(Map(), ErgoValidationSettingsUpdate.empty)
 
+  val VoteableParameterIds: Set[Byte] =
+    Parameters.parametersDescs.keySet + Parameters.SubblocksPerBlockIncrease
+
   def fromConfig(config: Config): VotingTargets = {
     val votingObject = config.getObject(s"$configPath.voting")
     val toDisable = config.getConfig(s"$configPath.voting").as[Array[Int]](s"rulesToDisable")

@@ -53,6 +53,13 @@ class MiningApiRouteSpec
     }
   }
 
+  it should "return candidate with supplied transactions" in {
+    Post(prefix + "/candidateWithTxs", Json.arr()) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      Try(responseAs[Json]) shouldBe 'success
+    }
+  }
+
   it should "process external solution" in {
     Post(prefix + "/solution", solution.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK

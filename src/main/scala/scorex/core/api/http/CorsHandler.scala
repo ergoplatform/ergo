@@ -13,18 +13,35 @@ import akka.http.scaladsl.server.{Directive0, Directives, Route}
   */
 trait CorsHandler extends Directives {
 
-  private val corsResponseHeaders: List[ModeledHeader] = List[ModeledHeader](
-    `Access-Control-Allow-Origin`.*,
-    `Access-Control-Allow-Credentials`(true),
-    `Access-Control-Allow-Headers`("Authorization", "Content-Type", "X-Requested-With", "api_key")
-  )
+  protected def corsAllowedOrigin: Option[String] = Some("*")
 
-  def corsHandler(r: Route): Route = addAccessControlHeaders {
-    preflightRequestHandler ~ r
+  protected def corsAllowedHeaders: Seq[String] =
+    Seq("Authorization", "Content-Type", "X-Requested-With", "api_key")
+
+  private lazy val corsResponseHeaders: List[ModeledHeader] =
+    corsAllowedOrigin.toList.flatMap {
+      case "*" =>
+        List[ModeledHeader](
+          `Access-Control-Allow-Origin`.*,
+          `Access-Control-Allow-Headers`(corsAllowedHeaders: _*)
+        )
+      case origin =>
+        List[ModeledHeader](
+          `Access-Control-Allow-Origin`(HttpOrigin(origin)),
+          `Access-Control-Allow-Credentials`(true),
+          `Access-Control-Allow-Headers`(corsAllowedHeaders: _*)
+        )
+    }
+
+  def corsHandler(r: Route): Route = corsAllowedOrigin.fold(r) { _ =>
+    addAccessControlHeaders {
+      preflightRequestHandler ~ r
+    }
   }
 
   def addCorsHeaders(response: HttpResponse): HttpResponse =
-    response.withHeaders(corsResponseHeaders)
+    if (corsResponseHeaders.isEmpty) response
+    else response.withHeaders(corsResponseHeaders)
 
   private def addAccessControlHeaders: Directive0 =
     respondWithHeaders(corsResponseHeaders)

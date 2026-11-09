@@ -139,6 +139,8 @@ class CandidateGenerator(
       context.system.eventStream.subscribe(self, classOf[SyntacticallyFailedModification])
     case Readers(_, _, _, _) =>
       log.error("Invalid readers state, mining is possible in UTXO mode only")
+    case gen: GenerateCandidate if gen.retryDeadline.exists(!_.hasTimeLeft()) =>
+      log.debug("Ignoring candidate request that expired before readers were available")
     case m =>
       // retry until initialized
       context.system.scheduler
@@ -204,7 +206,9 @@ class CandidateGenerator(
     case SyntacticallyFailedModification(_, modId, error) =>
       onSolvedBlockFailed(state, modId, error)
 
-    case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
+    case gen: GenerateCandidate if gen.retryDeadline.exists(!_.hasTimeLeft()) =>
+      log.debug("Ignoring expired candidate request")
+    case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk, _) =>
       val senderOpt = if (reply) Some(sender()) else None
       val effectiveMinerPk = optPk.getOrElse(minerPk)
       if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
@@ -250,10 +254,20 @@ class CandidateGenerator(
               "Can not generate block candidate: either mempool is empty or chain is not synced (maybe last block not fully applied yet"
             )
             senderOpt.foreach { s =>
-              context.system.scheduler.scheduleOnce(state.avgGenTime, self, gen)(
-                context.system.dispatcher,
-                s
-              )
+              val retryDelay = gen.retryDeadline match {
+                case Some(deadline) =>
+                  val minDelay = 100.millis
+                  val remaining = deadline.timeLeft
+                  if (remaining <= minDelay) None
+                  else Some(state.avgGenTime min ((remaining / 2) max minDelay))
+                case None => Some(state.avgGenTime)
+              }
+              retryDelay.foreach { delay =>
+                context.system.scheduler.scheduleOnce(delay, self, gen)(
+                  context.system.dispatcher,
+                  s
+                )
+              }
             }
         }
       }
@@ -335,7 +349,8 @@ object CandidateGenerator extends ScorexLogging {
     txsToInclude: Seq[ErgoTransaction],
     reply: Boolean,
     forced: Boolean,
-    optPk: Option[ProveDlog] = None
+    optPk: Option[ProveDlog] = None,
+    retryDeadline: Option[Deadline] = None
   )
 
   /** Local state of candidate generator to avoid mutable vars */

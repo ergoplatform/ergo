@@ -41,7 +41,7 @@ class SnapshotsInfoAdmissionSpec extends AnyPropSpec with Matchers with FileUtil
     }
   }
 
-  private class Fixture(bootstrap: Boolean) extends AkkaFixture {
+  private class Fixture(bootstrap: Boolean, fullBlockHistory: Boolean = false) extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val networkProbe = TestProbe("NetworkControllerProbe")
     val peerHandlerProbe = TestProbe("PeerHandlerProbe")
@@ -53,9 +53,13 @@ class SnapshotsInfoAdmissionSpec extends AnyPropSpec with Matchers with FileUtil
 
     deleteRecursive(ErgoHistory.historyDir(synchronizerSettings))
     val emptyHistory = generateHistory(verifyTransactions = true, StateType.Utxo,
-      PoPoWBootstrap = false, blocksToKeep = -1, utxoBootstrap = bootstrap)
-    val history = applyHeaderChain(emptyHistory,
-      genHeaderChain(10, emptyHistory, diffBitsOpt = None, useRealTs = false))
+      PoPoWBootstrap = false, blocksToKeep = -1, utxoBootstrap = bootstrap && !fullBlockHistory)
+    val history: ErgoHistory = if (fullBlockHistory) {
+      applyChain(emptyHistory, genChain(2, emptyHistory))
+    } else {
+      applyHeaderChain(emptyHistory,
+        genHeaderChain(10, emptyHistory, diffBitsOpt = None, useRealTs = false))
+    }
     val mempool = ErgoMemPool.empty(synchronizerSettings)
     val holder: ActorRef = system.actorOf(Props(new InjectedReadersNodeViewHolder(history, mempool)))
     val synchronizer: TestActorRef[ErgoNodeViewSynchronizer] = TestActorRef(Props(
@@ -94,8 +98,8 @@ class SnapshotsInfoAdmissionSpec extends AnyPropSpec with Matchers with FileUtil
         synchronizer.underlyingActor.snapshotOfferCount)
   }
 
-  private def withFixture(bootstrap: Boolean)(test: Fixture => Unit): Unit = {
-    val fixture = new Fixture(bootstrap)
+  private def withFixture(bootstrap: Boolean, fullBlockHistory: Boolean = false)(test: Fixture => Unit): Unit = {
+    val fixture = new Fixture(bootstrap, fullBlockHistory)
     try test(fixture)
     finally Await.result(fixture.system.terminate(), Duration.Inf)
   }
@@ -113,6 +117,16 @@ class SnapshotsInfoAdmissionSpec extends AnyPropSpec with Matchers with FileUtil
     withFixture(bootstrap = true) { f =>
       f.sendInfo()
       f.counts shouldBe Tuple2(0, 0)
+    }
+  }
+
+  property("snapshot metadata is ignored once a bootstrap node has full blocks") {
+    withFixture(bootstrap = true, fullBlockHistory = true) { f =>
+      assert(f.history.fullBlockHeight > 0)
+      f.requestInfo()
+      f.counts shouldBe Tuple2(1, 0)
+      f.sendInfo()
+      f.counts shouldBe Tuple2(1, 0)
     }
   }
 

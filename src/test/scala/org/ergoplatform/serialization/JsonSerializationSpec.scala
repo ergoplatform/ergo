@@ -115,4 +115,19 @@ class JsonSerializationSpec extends ErgoCorePropertyTest
     }
   }
 
+  property("generateCommitmentsRequest roundtrip with external boxes") {
+    forAll(transactionSigningRequestGen(true)) { signingRequest =>
+      val request = GenerateCommitmentsRequest(
+        signingRequest.unsignedTx,
+        Some(signingRequest.externalSecrets),
+        Some(Seq("input-box")),
+        Some(Seq("data-input-box"))
+      )
+
+      val parsedRequest = request.asJson.as[GenerateCommitmentsRequest].toOption.get
+
+      parsedRequest shouldBe request
+    }
+  }
+
 }

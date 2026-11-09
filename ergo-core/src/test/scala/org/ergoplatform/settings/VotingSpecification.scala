@@ -369,6 +369,30 @@ class VotingSpecification extends ErgoCorePropertyTest {
     esc2.currentParameters.blockVersion shouldBe 2
   }
 
+  property("suggestVotes and vote skip targets missing from parametersTable") {
+    val preV4Params = Parameters(0, DefaultParameters - SubblocksPerBlockIncrease, ErgoValidationSettingsUpdate.empty)
+    preV4Params.parametersTable.contains(SubblocksPerBlockIncrease) shouldBe false
+
+    val ownTargets = Map[Byte, Int](
+      SubblocksPerBlockIncrease -> (SubblocksPerBlockDefault + 10),
+      StorageFeeFactorIncrease -> (StorageFeeFactorDefault + StorageFeeFactorStep)
+    )
+    preV4Params.suggestVotes(ownTargets, voteForFork = false) shouldEqual
+      Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
+
+    val epochVotes = Array[(Byte, Int)](
+      SubblocksPerBlockIncrease -> 1,
+      SubblocksPerBlockDecrease -> 1,
+      StorageFeeFactorIncrease -> 1
+    )
+    preV4Params.vote(ownTargets, epochVotes, voteForFork = false) shouldEqual
+      Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
+
+    val v4Params = preV4Params.withNumOfSubblocksPerBlock(SubblocksPerBlockDefault)
+    v4Params.suggestVotes(Map(SubblocksPerBlockIncrease -> (SubblocksPerBlockDefault + 10)), voteForFork = false) shouldEqual
+      Array(SubblocksPerBlockIncrease, NoParameter, NoParameter)
+  }
+
   private def checkValidationSettings(vs: ErgoValidationSettings, updated: ErgoValidationSettingsUpdate): Unit = {
     vs.rules.foreach { r =>
       vs.isActive(r._1) shouldBe !updated.rulesToDisable.contains(r._1)

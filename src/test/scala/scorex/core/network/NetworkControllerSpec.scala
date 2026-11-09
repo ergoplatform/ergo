@@ -3,7 +3,9 @@ package scorex.core.network
 import akka.actor.ActorRef
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer
+import akka.util.ByteString
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
+import org.ergoplatform.network.{Handshake, HandshakeSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -245,6 +247,43 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       connectionProbe.send(controller, Tcp.Connected(testAddress, localAddress))
       connectionProbe.expectMsg(Tcp.Close)
       peerManagerProbe.expectNoMessage(500.millis)
+    }
+  }
+
+  property("transport lifecycle releases an established incoming slot after transport termination") {
+    withFixture { f =>
+      implicit val system = f.system
+      val (controller, peerManager, _) = f.createController(maxConnections = 2)
+      val events = TestProbe("TransportLifecycleEvents")
+      system.eventStream.subscribe(events.ref, classOf[HandshakedPeer])
+      system.eventStream.subscribe(events.ref, classOf[DisconnectedPeer])
+      val address = new InetSocketAddress("203.0.113.40", 9040)
+      val established = f.establishIncomingConnectionWithHandler(controller, peerManager, address)
+      val handshake = HandshakeSerializer.toBytes(Handshake(
+        defaultPeerSpec.copy(declaredAddress = Some(address)),
+        System.currentTimeMillis()
+      ))
+      established.connectionProbe.send(established.handlerRef, Tcp.Received(ByteString(handshake)))
+      events.expectMsgType[HandshakedPeer].remote.handlerRef shouldBe established.handlerRef
+      peerManager.expectMsgType[AddOrUpdatePeer]
+      established.connectionProbe.expectMsg(Tcp.ResumeReading)
+
+      val overflow = TestProbe("TransportLifecycleOverflow")
+      overflow.send(controller, Tcp.Connected(new InetSocketAddress("198.51.100.40", 9140),
+        settings.scorexSettings.network.bindAddress))
+      overflow.expectMsg(Tcp.Close)
+      peerManager.expectNoMessage(200.millis)
+
+      val watcher = TestProbe("TransportLifecycleWatcher")
+      val handlerWatcher = TestProbe("TransportLifecycleHandlerWatcher")
+      watcher.watch(established.connectionProbe.ref)
+      handlerWatcher.watch(established.handlerRef)
+      system.stop(established.connectionProbe.ref)
+      watcher.expectTerminated(established.connectionProbe.ref)
+      handlerWatcher.expectTerminated(established.handlerRef)
+      events.expectMsgType[DisconnectedPeer].peer.handlerRef shouldBe established.handlerRef
+
+      f.beginPendingConnection(controller, peerManager, address)
     }
   }
 

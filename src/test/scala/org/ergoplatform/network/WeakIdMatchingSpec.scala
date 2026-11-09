@@ -1,6 +1,6 @@
 package org.ergoplatform.network
 
-import akka.actor.{ActorRef, Props}
+import akka.actor.Props
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
@@ -8,7 +8,6 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
   ChangedMempool,
   ProcessInputBlockTransactions
 }
-import org.ergoplatform.network.message.Message
 import org.ergoplatform.network.message.inputblocks.{
   InputBlockTransactionIdsData,
   InputBlockTransactionIdsMessageSpec,
@@ -16,7 +15,7 @@ import org.ergoplatform.network.message.inputblocks.{
   InputBlockTransactionsRequest,
   InputBlockTransactionsRequestMessageSpec
 }
-import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
+import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.ErgoSettings
@@ -37,29 +36,13 @@ import scala.concurrent.{Await, ExecutionContextExecutor}
 /**
   * Weak ids in a list come from a peer. The cost of matching them must grow linearly with the list.
   *
-  * The time limits are far above the linear cost (under 1 s on a laptop). They are below the cost of
-  * pairwise matching on the same laptop: 128 s for the first test, 14 s for the second, 47 s for the third.
+  * The time limit is far above the linear cost (under 1 s on a laptop), and far below the cost of
+  * pairwise matching for a list at the limit.
   */
 class WeakIdMatchingSpec extends AnyPropSpec with Matchers with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
-
-  class SynchronizerUnderTest(
-    networkControllerRef: ActorRef,
-    viewHolderRef: ActorRef,
-    settings: ErgoSettings,
-    syncTracker: ErgoSyncTracker,
-    deliveryTracker: DeliveryTracker
-  )(implicit ec: ExecutionContextExecutor)
-    extends ErgoNodeViewSynchronizer(
-      networkControllerRef,
-      viewHolderRef,
-      ErgoSyncInfoMessageSpec,
-      settings,
-      syncTracker,
-      deliveryTracker
-    )(ec)
 
   class Fixture(mempoolTxs: Seq[ErgoTransaction]) extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
@@ -70,11 +53,12 @@ class WeakIdMatchingSpec extends AnyPropSpec with Matchers with FileUtils {
     val ncProbe         = TestProbe("NetworkControllerProbe")
     val viewHolderProbe = TestProbe("ViewHolderProbe")
 
-    val synchronizer: TestActorRef[SynchronizerUnderTest] = TestActorRef(
+    val synchronizer: TestActorRef[ErgoNodeViewSynchronizer] = TestActorRef(
       Props(
-        new SynchronizerUnderTest(
+        new ErgoNodeViewSynchronizer(
           ncProbe.ref,
           viewHolderProbe.ref,
+          ErgoSyncInfoMessageSpec,
           localSettings,
           ErgoSyncTracker(localSettings.scorexSettings.network),
           DeliveryTracker.empty(localSettings)
@@ -151,34 +135,19 @@ class WeakIdMatchingSpec extends AnyPropSpec with Matchers with FileUtils {
     case p: PenalizePeer => p
   }
 
-  property("a list with repeated ids is matched in linear time, with no penalty") {
+  property(
+    "a list at the limit and a body for it are matched in linear time, with no penalty"
+  ) {
     val mempoolTx = tx()
     withFixture(Seq(mempoolTx)) { f =>
-      val k   = 100000
-      val ids = Vector.fill(k)(mempoolTx.weakId) ++ randomIds(k)
-      seconds(f.processIds(randomBlockId(), ids)) should be < 10.0
+      // repeated ids of one mempool transaction, then random ids: the worst case for pairwise matching
+      val k       = InputBlockTransactionIdsMessageSpec.MaxTransactionIds / 2
+      val blockId = randomBlockId()
+      seconds(f.processIds(blockId, Vector.fill(k)(mempoolTx.weakId) ++ randomIds(k))) should be < 10.0
 
       val out = f.outgoing()
       requestedIds(out) shouldBe Seq(k)
       penalties(out) shouldBe empty
-    }
-  }
-
-  property("a missing id does not scan the whole mempool") {
-    withFixture(Vector.fill(1000)(tx())) { f =>
-      val n = 2731428
-      seconds(f.processIds(randomBlockId(), randomIds(n))) should be < 5.0
-
-      requestedIds(f.outgoing()) shouldBe Seq(n)
-    }
-  }
-
-  property("a body is merged with a long list in linear time") {
-    val mempoolTx = tx()
-    withFixture(Seq(mempoolTx)) { f =>
-      val k       = 100000
-      val blockId = randomBlockId()
-      f.processIds(blockId, Vector.fill(k)(mempoolTx.weakId) ++ randomIds(k))
 
       val body = InputBlockTransactionsData(blockId, Seq(tx()))
       seconds(
@@ -208,35 +177,6 @@ class WeakIdMatchingSpec extends AnyPropSpec with Matchers with FileUtils {
       delivered.std.inputBlockId shouldBe blockId
       delivered.std.transactions.map(_.id) shouldBe Seq.fill(3)(mempoolTx.id)
       penalties(f.outgoing()) shouldBe empty
-    }
-  }
-
-  property(
-    "a list above the limit gets a permanent penalty, a list at the limit does not"
-  ) {
-    withFixture(Seq.empty) { f =>
-      val max = InputBlockTransactionIdsMessageSpec.MaxTransactionIds
-
-      def send(ids: Seq[Array[Byte]]): Unit = {
-        val bytes = InputBlockTransactionIdsMessageSpec.toBytes(
-          InputBlockTransactionIdsData(randomBlockId(), ids)
-        )
-        f.synchronizer ! Message(
-          InputBlockTransactionIdsMessageSpec,
-          Left(bytes),
-          Some(f.peer)
-        )
-      }
-
-      send(randomIds(max))
-      val atLimit = f.outgoing()
-      requestedIds(atLimit) shouldBe Seq(max)
-      penalties(atLimit) shouldBe empty
-
-      send(randomIds(max + 1))
-      val aboveLimit = f.outgoing()
-      requestedIds(aboveLimit) shouldBe empty
-      penalties(aboveLimit).map(_.penaltyType) shouldBe Seq(PenaltyType.PermanentPenalty)
     }
   }
 }

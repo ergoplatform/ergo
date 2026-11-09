@@ -1822,8 +1822,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val totalTxs = weakTxIds.length
       val resTxs = new Array[ErgoTransaction](totalTxs)
 
-      // mempool txs go first, for one weak id the first transaction is used
-      val txsByWeakId = mutable.HashMap[ByteArrayWrapper, ErgoTransaction]()
+      // mempool txs go first, for one weak id the first transaction is used;
+      // a tree, not a hash map: the peer builds the body, so it can make the key hashes collide
+      val txsByWeakId = mutable.TreeMap[ByteArrayWrapper, ErgoTransaction]()
       (localTxsData.txs ++ transactionsData.transactions).foreach { tx =>
         txsByWeakId.getOrElseUpdate(ByteArrayWrapper(tx.weakId), tx)
       }

@@ -63,9 +63,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
     // the registry is sorted by id, so the candidates form one range of keys
     // todo: recheck if half is enough for collision resistance
-    pool.transactionsRegistry.keysIteratorFrom(s).takeWhile(_.startsWith(s)).find { id =>
-      pool.get(id).exists(_.transaction.witnessSerializedId.take(half).sameElements(tb))
-    }.flatMap(pool.get).map(_.transaction)
+    pool.transactionsRegistry.keysIteratorFrom(s).takeWhile(_.startsWith(s))
+      .flatMap(pool.get).map(_.transaction)
+      .find(_.witnessSerializedId.take(half).sameElements(tb))
   }
 
   override def contains(modifierId: ModifierId): Boolean = {

@@ -505,24 +505,24 @@ class ErgoWalletActor(settings: ErgoSettings,
                    minConfNum: Int,
                    maxConfNum: Int,
                    includeUnconfirmed: Boolean): Unit = {
+    // Preserve the historical -1 upper-height sentinel for confirmed transactions.
+    val maxConfirmedHeight = if (maxHeight == -1) Int.MaxValue else maxHeight
     val heightFrom = if (maxConfNum == Int.MaxValue) {
-      minHeight.toLong
+      minHeight
     } else {
-      Math.max(minHeight.toLong, state.fullHeight.toLong - maxConfNum.toLong)
+      Math.max(minHeight, state.fullHeight - maxConfNum)
     }
     val heightTo = if (minConfNum == 0) {
-      maxHeight.toLong
+      maxConfirmedHeight
     } else {
-      Math.min(maxHeight.toLong, state.fullHeight.toLong - minConfNum.toLong)
+      Math.min(maxConfirmedHeight, state.fullHeight - minConfNum)
     }
-    val validWindow = minHeight <= maxHeight && minConfNum <= maxConfNum && heightFrom <= heightTo
-    // Database keys compare heights as unsigned bytes. Never pass negative or inverted bounds.
-    val confirmedFrom = Math.max(0L, heightFrom)
-    val confirmedTo = Math.min(state.fullHeight.toLong, heightTo)
+    val validWindow = minHeight <= maxConfirmedHeight && minConfNum <= maxConfNum &&
+      minConfNum <= state.fullHeight && heightFrom <= heightTo
     log.debug("Starting to read wallet transactions")
     val ts0 = System.currentTimeMillis()
-    val confirmed = if (validWindow && confirmedFrom <= confirmedTo) {
-      scanIds.flatMap(scan => state.registry.walletTxsBetween(scan, confirmedFrom.toInt, confirmedTo.toInt))
+    val confirmed = if (validWindow) {
+      scanIds.flatMap(scan => state.registry.walletTxsBetween(scan, heightFrom, heightTo))
     } else {
       Seq.empty
     }
@@ -531,7 +531,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       .map(tx => AugWalletTransaction(tx, state.fullHeight - tx.inclusionHeight))
     val ts = System.currentTimeMillis()
     val txsToSend =
-      if (includeUnconfirmed && validWindow && heightTo > state.fullHeight) {
+      if (includeUnconfirmed && validWindow && maxHeight != -1 && heightTo > state.fullHeight) {
         // in order to include unconfirmed txs, heightTo should be grater than current height
         txs ++ scanIds.flatMap( scanId => ergoWalletService.getUnconfirmedTransactions(state, scanId) )
       } else {

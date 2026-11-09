@@ -10,6 +10,16 @@ import sigma.util.Extensions.LongOps
 
 object InputBlockTransactionIdsMessageSpec extends MessageSpecInputBlocks[InputBlockTransactionIdsData] {
   /**
+    * Max number of weak ids in one list (codes 102 and 105). A longer list fails to parse, and the
+    * peer gets a permanent penalty, so this limit must stay above any honest list.
+    *
+    * A valid input block holds at most 107,374 transactions: every transaction costs at least
+    * `ErgoInterpreter.interpreterInitCost` (10,000), and votes can not raise `maxBlockCost` above
+    * `Int.MaxValue / 2`. This limit is about 1.5 times that.
+    */
+  val MaxTransactionIds: Int = 163886
+
+  /**
     * Code which identifies what message type is contained in the payload
     */
   override val messageCode: MessageCode = 102: Byte
@@ -29,6 +39,8 @@ object InputBlockTransactionIdsMessageSpec extends MessageSpecInputBlocks[InputB
   override def parse(r: Reader): InputBlockTransactionIdsData = {
     val subBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val txsCount = r.getUInt().toIntExact
+    require(txsCount <= MaxTransactionIds,
+      s"Too many transaction ids declared: $txsCount, while the limit is $MaxTransactionIds")
     // every weak id takes exactly WeakIdLength bytes, so a bigger count is not possible to fulfil
     require(txsCount.toLong * ErgoTransaction.WeakIdLength <= r.remaining,
       s"Too many transaction ids declared: $txsCount, while only ${r.remaining} bytes remaining")

@@ -57,19 +57,15 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   override def transactionByWeakId(wId: WeakId): Option[ErgoTransaction] = {
     // todo: this impl is bound to very specific way to hash weakId, at least document both places correspondingly
-    val kt = pool.transactionsRegistry.keysIterator
     val half = ErgoTransaction.WeakIdLength / 2
     val s = bytesToId(wId.take(half))
     val tb = wId.takeRight(half)
 
+    // the registry is sorted by id, so the candidates form one range of keys
     // todo: recheck if half is enough for collision resistance
-    kt.find { id =>
-      if (id.startsWith(s)) {
-        pool.get(id).exists(_.transaction.witnessSerializedId.take(half).sameElements(tb))
-      } else {
-        false
-      }
-    }.flatMap(pool.get).map(_.transaction)
+    pool.transactionsRegistry.keysIteratorFrom(s).takeWhile(_.startsWith(s))
+      .flatMap(pool.get).map(_.transaction)
+      .find(_.witnessSerializedId.take(half).sameElements(tb))
   }
 
   override def contains(modifierId: ModifierId): Boolean = {

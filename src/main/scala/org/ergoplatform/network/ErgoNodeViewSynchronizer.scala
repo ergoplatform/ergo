@@ -29,6 +29,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import org.ergoplatform.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
+import scorex.db.ByteArrayWrapper
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
@@ -1381,8 +1382,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val diffIds = if (mempoolTxs.length == wIds.length) {
       Seq.empty[WeakId]
     } else {
-      val mempoolIds = mempoolTxs.map(_.weakId)
-      wIds.filter(wId => !mempoolIds.exists(mId => mId.sameElements(wId)))
+      // the set holds ids of local transactions only, so a peer can not choose their hash values
+      val mempoolIds = mempoolTxs.iterator.map(tx => ByteArrayWrapper(tx.weakId)).toSet
+      wIds.filterNot(wId => mempoolIds.contains(ByteArrayWrapper(wId)))
     }
     diffIds -> mempoolTxs
   }
@@ -1820,27 +1822,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val totalTxs = weakTxIds.length
       val resTxs = new Array[ErgoTransaction](totalTxs)
 
-      var allTxs = mutable.Seq[ErgoTransaction]()
-      allTxs ++= localTxsData.txs // mempoool txs
-      allTxs ++= transactionsData.transactions // peer txs
+      // mempool txs go first, for one weak id the first transaction is used;
+      // a tree, not a hash map: the peer builds the body, so it can make the key hashes collide
+      val txsByWeakId = mutable.TreeMap[ByteArrayWrapper, ErgoTransaction]()
+      (localTxsData.txs ++ transactionsData.transactions).foreach { tx =>
+        txsByWeakId.getOrElseUpdate(ByteArrayWrapper(tx.weakId), tx)
+      }
 
-      var allFound = true
+      var missing = 0
       cfor(0)(_ < totalTxs, _ + 1) { i =>
-        val weakId = weakTxIds(i)
-        allTxs.find(_.weakId.sameElements(weakId)) match {
+        txsByWeakId.get(ByteArrayWrapper(weakTxIds(i))) match {
           case Some(tx) =>
             resTxs(i) = tx
           case None =>
-            log.warn(s"Transaction with weakId ${Algos.encode(weakId)} not found for input block $subBlockId")
-            allFound = false
+            missing += 1
         }
       }
 
-      if (allFound) {
+      if (missing == 0) {
         val res = InputBlockTransactionsData(subBlockId, resTxs)
         viewHolderRef ! ProcessInputBlockTransactions(res)
       } else {
-        log.warn(s"Not all transactions found for input block $subBlockId, skipping processing")
+        log.warn(s"$missing of $totalTxs transactions not found for input block $subBlockId, skipping processing")
         // todo: investigate whether penalization is appropriate here.
         // The peer may be a relay node that doesn't have all transactions,
         // or transactions may have been evicted from mempool since the input

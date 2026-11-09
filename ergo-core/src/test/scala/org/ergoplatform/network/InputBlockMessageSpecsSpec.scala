@@ -14,6 +14,7 @@ import org.ergoplatform.network.message.inputblocks.{
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.{ErgoCorePropertyTest, SerializationTests}
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Blake2b256
@@ -449,6 +450,35 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
       recovered.inputBlockId shouldEqual blockId
       recovered.transactionIds.map(_.toSeq) shouldEqual txIds.map(_.toSeq)
     }
+  }
+
+  property("InputBlockTransactionIdsData parsing accepts the max id count, rejects one above") {
+    val max = InputBlockTransactionIdsMessageSpec.MaxTransactionIds
+    max shouldBe 163886
+    // a valid input block can not hold more transactions than this, so an honest list stays below the limit
+    max should be > (Int.MaxValue / 2) / ErgoInterpreter.interpreterInitCost
+    val blockId = modifierIdGen.sample.get
+
+    val atLimit = inputBlockTransactionIdsMessageSpec.parseBytes(
+      payloadWithDeclaredCount(blockId, max.toLong, weakIds(max)))
+    atLimit.transactionIds.length shouldBe max
+
+    val aboveLimit = inputBlockTransactionIdsMessageSpec.parseBytesTry(
+      payloadWithDeclaredCount(blockId, max + 1L, weakIds(max + 1)))
+    rejectedByCountBound(aboveLimit) shouldBe true
+  }
+
+  property("InputBlockTransactionsRequest parsing accepts the max id count, rejects one above") {
+    val max = InputBlockTransactionIdsMessageSpec.MaxTransactionIds
+    val blockId = modifierIdGen.sample.get
+
+    val atLimit = inputBlockTransactionsRequestMessageSpec.parseBytes(
+      payloadWithDeclaredCount(blockId, max.toLong, weakIds(max)))
+    atLimit.txIds.length shouldBe max
+
+    val aboveLimit = inputBlockTransactionsRequestMessageSpec.parseBytesTry(
+      payloadWithDeclaredCount(blockId, max + 1L, weakIds(max + 1)))
+    rejectedByCountBound(aboveLimit) shouldBe true
   }
 
   property("InputBlockTransactionIdsData with zero id count parses to empty") {

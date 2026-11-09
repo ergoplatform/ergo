@@ -17,7 +17,7 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 case class ADProofs(headerId: ModifierId,
                     proofBytes: SerializedAdProof,
@@ -50,14 +50,16 @@ case class ADProofs(headerId: ModifierId,
       changes.operations.flatMap(o => verifier.performOneOperation(o).get)
     }
 
-    val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,
-      None, maxNumOperations = Some(changes.operations.size))
+    val verifier = new CanonicalBatchAVLVerifier(previousHash, proofBytes, changes.operations.size)
 
     applyChanges(verifier, changes).flatMap { oldValues =>
       verifier.digest match {
         case Some(digest) =>
           if (java.util.Arrays.equals(digest, expectedHash)) {
-            Success(oldValues)
+            // scrypto's verifier accepts proofs padded in ways that change their hash, while
+            // utxo-mode nodes regenerate the proof and compare its hash with header.ADProofsRoot.
+            // Digest-mode nodes must accept the same proofs as them, so only the canonical one is valid.
+            verifier.checkCanonicalForm().map(_ => oldValues)
           } else {
             val msg = s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"
             Failure(new IllegalArgumentException(msg))

@@ -103,16 +103,16 @@ class SnapshotsInfoAdmissionSpec extends AnyPropSpec with Matchers with FileUtil
   property("an ordinary node ignores snapshot metadata even if a request marker exists") {
     withFixture(bootstrap = false) { f =>
       f.requestInfo()
-      f.counts shouldBe (1, 0)
+      f.counts shouldBe Tuple2(1, 0)
       f.sendInfo()
-      f.counts shouldBe (1, 0)
+      f.counts shouldBe Tuple2(1, 0)
     }
   }
 
   property("a bootstrap node ignores snapshot metadata from a peer it did not ask") {
     withFixture(bootstrap = true) { f =>
       f.sendInfo()
-      f.counts shouldBe (0, 0)
+      f.counts shouldBe Tuple2(0, 0)
     }
   }
 
@@ -120,11 +120,11 @@ class SnapshotsInfoAdmissionSpec extends AnyPropSpec with Matchers with FileUtil
     withFixture(bootstrap = true) { f =>
       f.history.fullBlockHeight shouldBe 0
       f.requestInfo()
-      f.counts shouldBe (1, 0)
+      f.counts shouldBe Tuple2(1, 0)
       f.sendInfo()
-      f.counts shouldBe (0, 1)
+      f.counts shouldBe Tuple2(0, 1)
       f.sendInfo()
-      f.counts shouldBe (0, 1)
+      f.counts shouldBe Tuple2(0, 1)
       val sent = f.networkProbe.receiveWhile(max = 500.millis, idle = 250.millis) { case m => m }
       sent.count {
         case send: SendToNetwork => send.message.spec.messageCode == GetManifestSpec.messageCode
@@ -137,9 +137,9 @@ class SnapshotsInfoAdmissionSpec extends AnyPropSpec with Matchers with FileUtil
     withFixture(bootstrap = true) { f =>
       f.requestInfo()
       f.synchronizer ! DisconnectedPeer(f.peer)
-      f.counts shouldBe (0, 0)
+      f.counts shouldBe Tuple2(0, 0)
       f.sendInfo()
-      f.counts shouldBe (0, 0)
+      f.counts shouldBe Tuple2(0, 0)
     }
   }
 }

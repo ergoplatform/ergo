@@ -2,10 +2,10 @@ package org.ergoplatform.nodeView.state
 
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.settings.{Args, ErgoSettingsReader}
+import org.ergoplatform.settings.{Algos, Args, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, ErgoStateContextHelpers, RandomWrapper}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.scalacheck.Gen
@@ -14,6 +14,7 @@ import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.{boxesHolderGen, validTransactionFromBoxes}
 import org.ergoplatform.validation.ValidationResult.{Invalid, Valid}
 import scorex.db.ByteArrayWrapper
+import scorex.crypto.authds.avltree.batch.{Lookup, Remove}
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
@@ -118,6 +119,71 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
         invalidTxs.count(_.inputs.contains(inputToDoubleSpend)) shouldBe 2
 
         ErgoState.boxChanges(invalidTxs).get._1.length shouldBe 2
+      }
+    }
+  }
+
+  property("applyModifier() - output created in a block and spent twice in it") {
+    forAll(boxesHolderGen) { bh =>
+      val us = createUtxoState(bh, parameters)
+      val ds = createDigestState(bytesToVersion(Array.fill(32)(100: Byte)), us.rootDigest)
+      try {
+        val validBlock = validFullBlock(None, us, bh)
+        val txs = validBlock.transactions
+        val spentInBlock = txs.zipWithIndex.flatMap { case (tx, i) =>
+          tx.outputs.filter(o => txs.drop(i + 1).exists(_.inputs.exists(in => java.util.Arrays.equals(in.boxId, o.id))))
+        }
+        whenever(spentInBlock.nonEmpty) {
+          val box = spentInBlock.head
+          val secondSpend = validTransactionFromBoxes(IndexedSeq(box), issueNew = false)
+          val invalidTxs = txs :+ secondSpend
+          secondSpend.statelessValidity() shouldBe 'success
+
+          // boxChanges() does not throw here: the first spend cancels the insertion,
+          // so the second spend becomes a removal of a box the UTXO set does not hold
+          val changes = ErgoState.stateChanges(invalidTxs).get
+          changes.toRemove.map(r => ByteArrayWrapper(r.key)) should contain(ByteArrayWrapper(box.id))
+          us.boxById(box.id) shouldBe None
+
+          // proof with the non-membership path for the box in place of its removal
+          val ops = changes.operations.map {
+            case Remove(key) if java.util.Arrays.equals(key, box.id) => Lookup(key)
+            case op => op
+          }
+          val (proofBytes, stateRoot) = us.persistentProver.avlProver.generateProofForOperations(ops).get
+          val header = validBlock.header.copy(
+            transactionsRoot = BlockTransactions.transactionsRoot(invalidTxs, validBlock.header.version),
+            stateRoot = stateRoot,
+            ADProofsRoot = ADProofs.proofDigest(proofBytes))
+          val invalidBlock = ErgoFullBlock(
+            header,
+            BlockTransactions(header.id, validBlock.header.version, invalidTxs),
+            validBlock.extension.copy(headerId = header.id),
+            Some(ADProofs(header.id, proofBytes)))
+
+          // UtxoState: the removal fails in the AVL+ tree (fbOperationFailed);
+          // DigestState: it fails in ADProofs.verify, reported as a missing input (txBoxesToSpend)
+          val usRoot = us.rootDigest
+          val usVersion = us.store.lastVersionID.map(_.toSeq)
+          val usResult = us.applyModifier(invalidBlock, None)(_ => ())
+          usResult shouldBe 'failure
+          val usError = usResult.failed.get
+          usError.getMessage should include(s"Key ${Algos.encode(box.id)} does not exist")
+          us.rootDigest shouldBe usRoot
+          us.store.lastVersionID.map(_.toSeq) shouldBe usVersion
+          us.applyModifier(validBlock, None)(_ => ()) shouldBe 'success
+
+          val dsVersion = ds.store.lastVersionID.map(_.toSeq)
+          val dsResult = ds.applyModifier(invalidBlock, None)(_ => ())
+          dsResult shouldBe 'failure
+          val dsError = dsResult.failed.get
+          dsError.getMessage should include(s"Key ${Algos.encode(box.id)} does not exist")
+          ds.store.lastVersionID.map(_.toSeq) shouldBe dsVersion
+          ds.applyModifier(validBlock, None)(_ => ()) shouldBe 'success
+        }
+      } finally {
+        us.closeStorage()
+        ds.close()
       }
     }
   }

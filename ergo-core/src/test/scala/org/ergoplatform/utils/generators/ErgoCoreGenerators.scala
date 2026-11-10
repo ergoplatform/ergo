@@ -136,7 +136,9 @@ object ErgoCoreGenerators {
     pk <- genECPoint
     w <- genECPoint
     n <- genBytes(8)
-    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q - 1) + 1)
+    // from 2: a version-1 header with difficulty 1 and d = 1 has NiPoPoW level 256,
+    // which the one-byte interlinks count cannot hold
+    d <- Arbitrary.arbitrary[BigInt].map(_.mod(q - 2) + 2)
   } yield AutolykosSolution(pk, w, n, d)
 
   /**

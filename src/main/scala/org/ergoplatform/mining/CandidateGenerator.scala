@@ -1123,13 +1123,13 @@ object CandidateGenerator extends ScorexLogging {
     * Collects valid non-conflicting transactions from `mandatoryTxs` and then `mempoolTxsIn` and adds a transaction
     * collecting fees from them to `minerPk`.
     *
-    * Resulting transactions total cost does not exceed `maxBlockCost`, total size does not exceed `maxBlockSize`,
-    * and the miner's transaction is correct.
-    *
     * The accepted input-block prefix supplies common state to both candidate payloads. Its transactions
     * are not returned again; its collectible fees belong only to the ordering payload. Each new input
-    * payload must also leave the accumulated prefix within the conservative ordering budget.
-    * Prefix-only rewards may remain unclaimed when the mandatory transactions consume the budget.
+    * payload and the accumulated prefix respect the conservative `maxBlockCost` budget; an already
+    * accepted prefix above that budget cannot grow further. At V4 the alternative ordering payload,
+    * including emission and collectible fees, may use the upcoming block's full cost limit. Legacy
+    * ordering payloads remain under `maxBlockCost`. Both payloads respect `maxBlockSize`; rewards
+    * may remain unclaimed when the full cost or size limit is reached.
     *
     * @return - input block transactions to include, ordering blocks transactions to include, transaction ids turned out to be invalid.
     */
@@ -1201,9 +1201,12 @@ object CandidateGenerator extends ScorexLogging {
     }
     require(correctLimits(prefix, upcomingContext.currentParameters.maxBlockCost, maxBlockSize, version),
       "Selected input transactions exceed the ordering block limits")
-    // A mandatory prefix can consume the conservative mining cost gap. Keep that valid prefix,
-    // but give optional transactions no additional cost allowance in that case.
-    val orderingCostLimit = math.max(maxBlockCost.toLong, prefix.map(_._2.toLong).sum)
+    // The conservative gap limits input-chain growth, not the ordering payload. A V4
+    // ordering block may still include emission when the prefix has spent that gap.
+    val inputChainCostLimit = math.max(maxBlockCost.toLong, prefix.map(_._2.toLong).sum)
+    val orderingCostLimit =
+      if (inputBlocksEnabled) upcomingContext.currentParameters.maxBlockCost.toLong
+      else inputChainCostLimit
     var remainingTxs = transactions.filterNot(tx => prefixIds.contains(tx.id))
     val pendingOutputCounts = scala.collection.mutable.Map.empty[ModifierId, Int]
     remainingTxs.iterator.flatMap(_.outputs).foreach { output =>
@@ -1351,7 +1354,7 @@ object CandidateGenerator extends ScorexLogging {
               if (inputTx) {
                 if (correctLimits(accInput :+ costed, maxBlockCost, maxBlockSize, version) &&
                   correctLimits(prefix ++ accInput :+ costed,
-                    math.min(orderingCostLimit, upcomingContext.currentParameters.maxBlockCost.toLong),
+                    math.min(inputChainCostLimit, upcomingContext.currentParameters.maxBlockCost.toLong),
                     maxBlockSize, version)) {
                   accInput += costed
                   remainingTxs = remainingTxs.tail

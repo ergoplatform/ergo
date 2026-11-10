@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest}
 import org.ergoplatform.utils.ErgoCoreTestConstants.{defaultMinerPk, emptyVSUpdate, parameters}
-import org.ergoplatform.utils.ErgoNodeTestConstants.settings
+import org.ergoplatform.utils.ErgoNodeTestConstants.{genesisEmissionBox, settings}
 import org.scalatest.Outcome
 import scorex.util.bytesToId
 import sigma.Colls
@@ -170,6 +170,33 @@ class MatrixFeeSelectionSpec extends ErgoCorePropertyTest with ErgoCompilerHelpe
     assertFeeReward(ordering.head, Seq(accepted))
   }
 
+  property("V4 keeps emission when the prefix spends the conservative input-chain allowance") {
+    val prefixSource = box(50)
+    val prefix = ErgoTransaction(IndexedSeq(Input(prefixSource.id, ProverResult.empty)),
+      IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(prefixSource.value, TrueTree, 1)))
+    val boxes = Seq(prefixSource, genesisEmissionBox)
+    val us = state(boxes)
+    val emission = CandidateGenerator.collectRewards(
+      us.boxById(genesisEmissionBox.id), us.stateContext.currentHeight,
+      Seq.empty, defaultMinerPk, us.stateContext).head
+    val context = us.stateContext.upcoming(defaultMinerPk.value, 1L,
+      settings.chainSettings.initialNBits, Array.emptyByteArray, emptyVSUpdate,
+      Header.Interpreter60Version)
+    val prefixCost = us.validateWithCost(prefix, context, parameters.maxBlockCost,
+      None, softFieldsAllowed = true).get
+    val emissionCost = us.withTransactions(Seq(prefix)).validateWithCost(emission,
+      context, parameters.maxBlockCost, None, softFieldsAllowed = true).get
+    val conservativeLimit = math.max(prefixCost, emissionCost)
+    (prefixCost.toLong + emissionCost) should be > conservativeLimit.toLong
+    (prefixCost.toLong + emissionCost) should be < parameters.maxBlockCost.toLong
+
+    val (input, ordering, invalid) = select(boxes, Seq(emission),
+      Header.Interpreter60Version, prefix = Seq(prefix), maxCost = conservativeLimit)
+    input shouldBe empty
+    ordering.map(_.id) should contain(emission.id)
+    invalid shouldBe empty
+  }
+
   property("an accepted input payment duplicated in the pool is skipped without invalidation") {
     val source = box(11)
     val accepted = payment(source)
@@ -230,7 +257,7 @@ class MatrixFeeSelectionSpec extends ErgoCorePropertyTest with ErgoCompilerHelpe
     budget should be > 0
     transactionCost(Seq(source), complete.last, Seq(tx)) should be > 0
     val (input, ordering, invalid) = select(Seq(source), Seq(tx), Header.Interpreter60Version,
-      maxCost = budget)
+      maxCost = budget, protocolCost = budget)
     input shouldBe empty
     ordering shouldBe empty
     invalid shouldBe empty
@@ -250,7 +277,8 @@ class MatrixFeeSelectionSpec extends ErgoCorePropertyTest with ErgoCompilerHelpe
       val (input, ordering, invalid) = select(Seq(source), Seq.empty, Header.Interpreter60Version,
         prefix = Seq(accepted),
         maxCost = if (limit == "cost") prefixCost else parameters.maxBlockCost,
-        maxSize = if (limit == "size") prefixSize else parameters.maxBlockSize)
+        maxSize = if (limit == "size") prefixSize else parameters.maxBlockSize,
+        protocolCost = if (limit == "cost") prefixCost else parameters.maxBlockCost)
       input shouldBe empty
       ordering shouldBe empty
       invalid shouldBe empty

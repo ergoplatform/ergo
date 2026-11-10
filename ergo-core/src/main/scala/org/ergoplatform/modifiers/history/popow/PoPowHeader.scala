@@ -1,25 +1,25 @@
 package org.ergoplatform.modifiers.history.popow
 
 import cats.syntax.either._
-import sigmastate.utils.Helpers._
 import cats.Traverse
 import cats.implicits.{catsStdInstancesForEither, catsStdInstancesForList}
 import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.core.BytesSerializable
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.extension.Extension.merkleTree
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.crypto.authds.Side
-import scorex.crypto.authds.merkle.BatchMerkleProof
+import scorex.crypto.authds.{LeafData, Side}
+import scorex.crypto.authds.merkle.{BatchMerkleProof, Leaf}
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+import java.nio.ByteBuffer
 import scala.util.Try
 
 /**
@@ -42,7 +42,16 @@ case class PoPowHeader(header: Header,
 
   def height: Int = header.height
 
-  def checkInterlinksProof(): Boolean = PoPowHeader.checkInterlinksProof(interlinks, interlinksProof)
+  def checkInterlinksProof(): Boolean = {
+    val proofIsEmpty = interlinksProof.indices.isEmpty && interlinksProof.proofs.isEmpty
+    if (header.isGenesis) {
+      interlinks.isEmpty && proofIsEmpty
+    } else if (!PoPowHeader.hasCanonicalInterlinkRuns(interlinks)) {
+      false
+    } else {
+      PoPowHeader.checkInterlinksProof(interlinks, interlinksProof, header.extensionRoot)
+    }
+  }
 }
 
 object PoPowHeader {
@@ -51,16 +60,61 @@ object PoPowHeader {
 
   implicit val hf: HF = Algos.hash
 
+  private[popow] def hasCanonicalInterlinkRuns(interlinks: Seq[ModifierId]): Boolean = {
+    interlinks.headOption.exists { first =>
+      var current = first
+      var runLength = 1
+      var closedRuns = Set.empty[ModifierId]
+
+      interlinks.iterator.zipWithIndex.drop(1).forall { case (interlink, position) =>
+        if (interlink == current) {
+          if (runLength == 255) {
+            false
+          } else {
+            runLength += 1
+            true
+          }
+        } else if (position > 255) {
+          false
+        } else {
+          closedRuns += current
+          if (closedRuns.contains(interlink)) {
+            false
+          } else {
+            current = interlink
+            runLength = 1
+            true
+          }
+        }
+      }
+    }
+  }
+
   /**
-    * Validates interlinks merkle root against provided proof
+    * Validates the exact packed interlink leaves against the full extension root
     */
-  def checkInterlinksProof(interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]): Boolean = {
-    if (interlinks.isEmpty && proof.indices.isEmpty && proof.proofs.isEmpty) {
-      true
+  def checkInterlinksProof(interlinks: Seq[ModifierId],
+                           proof: BatchMerkleProof[Digest32],
+                           extensionRoot: Digest32): Boolean = {
+    if (!PoPowHeaderSerializer.hasValidMerkleProofStructure(
+      proof.indices.map(_._1),
+      proof.proofs.size
+    )) {
+      false
     } else {
-      val fields = NipopowAlgos.packInterlinks(interlinks)
-      val tree = merkleTree(fields)
-      proof.valid(tree.rootHash)
+      Try {
+        val expectedLeafHashes = NipopowAlgos.packInterlinks(interlinks)
+          .map(Extension.kvToLeaf)
+          .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
+        val provenLeafHashes = proof.indices.map(_._2)
+
+        interlinks.nonEmpty &&
+          expectedLeafHashes.size == provenLeafHashes.size &&
+          expectedLeafHashes.zip(provenLeafHashes).forall { case (expected, proven) =>
+            expected sameElements proven
+          } &&
+          proof.valid(extensionRoot)
+      }.getOrElse(false)
     }
   }
 
@@ -142,8 +196,86 @@ object PoPowHeader {
 object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
   import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 
+  // Generous wire sanity limits shared with the sigma-rust NiPoPoW parser.
+  private[ergoplatform] final val MaxHeaderBytes = 10000
+  private[ergoplatform] final val MaxInterlinks = 10000
+  private[ergoplatform] final val MaxMerkleProofBytes = 1000000
+  private[ergoplatform] final val MaxSerializedBytes =
+    MaxHeaderBytes + MaxInterlinks * ModifierIdLength + MaxMerkleProofBytes + 64
+
+  private val MerkleProofCountBytes = 8
+  private val MerkleIndexBytes = 36
+  private val MerkleProofNodeBytes = 33
+  private[ergoplatform] final val MaxMerkleProofDepth =
+    Extension.FieldKeySize * java.lang.Byte.SIZE
+  private val MaxMerkleLeafIndex = (1 << MaxMerkleProofDepth) - 1
+
   implicit val hf: HF = Algos.hash
   val merkleProofSerializer = new BatchMerkleProofSerializer[Digest32, HF]
+
+  private def requireWithinLimit(value: Int, limit: Int, what: String): Unit =
+    require(value <= limit, s"$what $value exceeds sanity limit $limit")
+
+  private[ergoplatform] def hasValidMerkleProofStructure(indices: Seq[Int],
+                                                          proofCount: Int): Boolean = {
+    if (indices.isEmpty) {
+      proofCount == 0
+    } else if (proofCount < 0 ||
+      indices.exists(index => index < 0 || index > MaxMerkleLeafIndex) ||
+      indices.distinct.size != indices.size) {
+      false
+    } else {
+      var current = indices.sorted.toVector
+      var remainingProofs = proofCount
+      var depth = 0
+      var valid = true
+
+      while (valid && !(current.size == 1 && current.head == 0 && remainingProofs == 0) &&
+        depth < MaxMerkleProofDepth) {
+        val currentIndices = current.toSet
+        val missingSiblings = current.count(index => !currentIndices.contains(index ^ 1))
+        if (missingSiblings > remainingProofs) {
+          valid = false
+        } else {
+          remainingProofs -= missingSiblings
+          current = current.map(_ / 2).distinct
+          depth += 1
+        }
+      }
+
+      valid && current.size == 1 && current.head == 0 && remainingProofs == 0
+    }
+  }
+
+  private def validateMerkleProofPayload(bytes: Array[Byte]): Unit = {
+    require(bytes.length >= MerkleProofCountBytes,
+      s"Merkle proof counts require at least $MerkleProofCountBytes bytes")
+    // BatchMerkleProofSerializer stores both counts as fixed-width big-endian ints.
+    val counts = ByteBuffer.wrap(bytes)
+    val indexCount = counts.getInt
+    val proofCount = counts.getInt
+    require(indexCount >= 0 && proofCount >= 0,
+      "Merkle proof counts must be non-negative")
+
+    val indexBytes = Math.multiplyExact(indexCount.toLong, MerkleIndexBytes.toLong)
+    val proofBytes = Math.multiplyExact(proofCount.toLong, MerkleProofNodeBytes.toLong)
+    val requiredBytes = Math.addExact(
+      MerkleProofCountBytes.toLong,
+      Math.addExact(indexBytes, proofBytes)
+    )
+    require(requiredBytes == bytes.length.toLong,
+      s"Merkle proof counts require $requiredBytes bytes, payload has ${bytes.length}")
+
+    val indices = Vector.newBuilder[Int]
+    var index = 0
+    while (index < indexCount) {
+      indices += counts.getInt
+      counts.position(counts.position() + MerkleIndexBytes - Integer.BYTES)
+      index += 1
+    }
+    require(hasValidMerkleProofStructure(indices.result(), proofCount),
+      "Merkle proof structure exceeds the extension key space")
+  }
 
   override def serialize(obj: PoPowHeader, w: Writer): Unit = {
     val headerBytes = obj.header.bytes
@@ -157,12 +289,17 @@ object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
   }
 
   override def parse(r: Reader): PoPowHeader = {
-    val headerSize = r.getUInt().toIntExact
-    val header = HeaderSerializer.parseBytes(r.getBytes(headerSize))
+    val headerLength = r.getUInt().toIntExact
+    requireWithinLimit(headerLength, MaxHeaderBytes, "header length")
+    val header = HeaderSerializer.parseBytes(r.getBytes(headerLength))
     val linksQty = r.getUInt().toIntExact
+    requireWithinLimit(linksQty, MaxInterlinks, "interlink count")
     val interlinks = (0 until linksQty).map(_ => bytesToId(r.getBytes(ModifierIdLength)))
-    val interlinksProofSize = r.getUInt().toIntExact
-    val interlinksProof = merkleProofSerializer.deserialize(r.getBytes(interlinksProofSize)).get
+    val interlinksProofLength = r.getUInt().toIntExact
+    requireWithinLimit(interlinksProofLength, MaxMerkleProofBytes, "Merkle proof length")
+    val proofBytes = r.getBytes(interlinksProofLength)
+    validateMerkleProofPayload(proofBytes)
+    val interlinksProof = merkleProofSerializer.deserialize(proofBytes).get
     PoPowHeader(header, interlinks, interlinksProof)
   }
 

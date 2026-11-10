@@ -142,11 +142,17 @@ object TransactionBuilder {
   def collectOutputTokens(outputCandidates: Seq[ErgoBoxCandidate]): TokensMap = {
     AssetUtils.mergeAssets(
       initialMap = Map.empty[ModifierId, Long],
-      maps = outputCandidates.map(b => collTokensToMap(b.additionalTokens)): _*)
+      maps = outputCandidates.map(b => sumTokenAmounts(b.additionalTokens)): _*)
   }
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
     tokens.toArray.map(t => t._1.toModifierId -> t._2).toMap
+
+  def sumTokenAmounts(tokens: Coll[(TokenId, Long)]): TokensMap =
+    tokens.toArray.foldLeft(Map.empty[ModifierId, Long]) { case (amounts, (tokenId, amount)) =>
+      val id = tokenId.toModifierId
+      amounts.updated(id, java7.compat.Math.addExact(amounts.getOrElse(id, 0L), amount))
+    }
 
   def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
     tokens.toArray.map {t => t._1.toTokenId -> t._2}.toColl

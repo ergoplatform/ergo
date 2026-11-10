@@ -1696,7 +1696,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   }
 
   it should "reply with an error and not restart when the state is broken" in new TestKit(
-    ActorSystem()
+    testSystem()
   ) {
     try {
       val testDir =

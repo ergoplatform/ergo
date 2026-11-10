@@ -1574,6 +1574,25 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getInputBlockTransactions(ib1.id, tx1.map(_.weakId)) shouldBe Some(tx1)
   }
 
+  property("transactions for unknown input block are not cached") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val tx1 = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val unknownInputBlockId = bytesToId(Algos.hash("unknown-input-block"))
+
+    h.applyInputBlockTransactions(unknownInputBlockId, tx1, us) shouldBe (Seq.empty -> Seq.empty)
+    h.getInputBlockTransactionIds(unknownInputBlockId) shouldBe None
+    h.getInputBlockTransactions(unknownInputBlockId) shouldBe None
+    h.getInputBlockTransactions(unknownInputBlockId, tx1.map(_.weakId)) shouldBe None
+    h.getInputBlockTransactionWeakIds(unknownInputBlockId) shouldBe None
+  }
+
   property("input block with transactions exceeding block cost limit should be rejected") {
     val bh = BoxHolder(Seq(eb1, eb2))
     val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
@@ -3164,6 +3183,30 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     invokePrune(h)
 
     h.getInputBlock(ib1.id) shouldBe None
+  }
+
+  property("prune should remove ordering-block transactions behind the best chain") {
+    val bh = BoxHolder(Seq(eb1, eb2))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    val oldOrderingId = c1.head.id
+    val bestOrderingId = c1.last.id
+
+    h.saveOrderingBlockTransactions(oldOrderingId, txs)
+    h.saveOrderingBlockTransactions(bestOrderingId, txs)
+
+    h.getOrderingBlockTransactions(oldOrderingId) shouldBe Some(txs)
+    h.getOrderingBlockTransactions(bestOrderingId) shouldBe Some(txs)
+
+    invokePrune(h)
+
+    h.getOrderingBlockTransactions(oldOrderingId) shouldBe None
+    h.getOrderingBlockTransactions(bestOrderingId) shouldBe Some(txs)
   }
 
   property("prune should drop old input-block records and clean the disconnected waitlist") {

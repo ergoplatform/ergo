@@ -784,7 +784,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   private def prune(): Unit = {
     val bestHeight = bestBlocks._1.map(_.height).getOrElse(0)
 
-    // Phase 1: Remove input block trees for ordering blocks that are behind the best chain
+    // Phase 1: Remove input block trees and ordering block transactions for ordering blocks that are behind the best chain
     val orderingBlockIdsToRemove = inputBlockTrees.keys.filter { orderingId =>
       // Remove if the ordering block height is behind the current best height
       bestHeight > historyReader.heightOf(orderingId).getOrElse(0)
@@ -792,6 +792,14 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     orderingBlockIdsToRemove.foreach { id =>
       inputBlockTrees.remove(id)
+    }
+
+    val orderingTxBlockIdsToRemove = orderingBlockTransactions.keys.filter { orderingId =>
+      bestHeight > historyReader.heightOf(orderingId).getOrElse(0)
+    }.toSeq
+
+    orderingTxBlockIdsToRemove.foreach { id =>
+      orderingBlockTransactions.remove(id)
     }
 
     // Phase 2: Remove individual input blocks that are too far behind the best chain
@@ -963,17 +971,17 @@ trait InputBlocksProcessor extends ScorexLogging {
         return Seq.empty -> Seq.empty
       }
 
-      val transactionIds = transactions.map(_.id)
-      inputBlockTransactions.put(sbId, transactionIds)
-
-      // put transactions into cache shared among all the input blocks,
-      // to avoid data duplication in input block related functions
-      transactions.foreach { tx =>
-        transactionsCache.put(tx.id, tx)
-      }
-
       inputBlockRecords.get(sbId) match {
         case Some(ib) =>
+          val transactionIds = transactions.map(_.id)
+          inputBlockTransactions.put(sbId, transactionIds)
+
+          // put transactions into cache shared among all the input blocks,
+          // to avoid data duplication in input block related functions
+          transactions.foreach { tx =>
+            transactionsCache.put(tx.id, tx)
+          }
+
           val orderingId = extractOrderingId(ib)
           if (!bestBlocks._1.map(_.id).contains(orderingId)) {
             log.debug(s"Skipping input block transactions for $sbId: ordering block $orderingId is not best")

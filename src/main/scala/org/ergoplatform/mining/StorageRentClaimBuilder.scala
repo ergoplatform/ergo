@@ -200,7 +200,8 @@ object StorageRentClaimBuilder extends ScorexLogging {
       // so the recreations producing them are not claimed either (they stay eligible for
       // a later candidate with more proceeds); burns are unaffected, their outputs carry
       // the burned values themselves.
-      val feeDust = dustLimit(p2pkCandidate(0L, minerTree, currentHeight), 0, parameters)
+      val feeCandidate = p2pkCandidate(sweptFees, minerTree, currentHeight)
+      val feeDust = dustLimit(feeCandidate, claimed.length.toShort, parameters)
       val dropRecreations = sweptFees > 0 && sweptFees < feeDust
       val finalClaimed = if (dropRecreations) claimed.filter(!_._2) else claimed
 
@@ -209,7 +210,7 @@ object StorageRentClaimBuilder extends ScorexLogging {
         None
       } else {
         val feeOutputs =
-          if (!dropRecreations && sweptFees > 0) IndexedSeq(p2pkCandidate(sweptFees, minerTree, currentHeight))
+          if (!dropRecreations && sweptFees > 0) IndexedSeq(feeCandidate)
           else IndexedSeq.empty
         val outputCandidates = finalClaimed.toIndexedSeq.map(_._3) ++ feeOutputs
 

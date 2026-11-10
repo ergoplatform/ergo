@@ -253,9 +253,11 @@ class MatrixFeeSelectionSpec extends ErgoCorePropertyTest with ErgoCompilerHelpe
     val tx = payment(source)
     val (_, complete, _) = select(Seq(source), Seq(tx), Header.Interpreter60Version)
     complete should have size 2
-    val budget = transactionCost(Seq(source), tx)
-    budget should be > 0
-    transactionCost(Seq(source), complete.last, Seq(tx)) should be > 0
+    val paymentCost = transactionCost(Seq(source), tx)
+    val rewardCost = transactionCost(Seq(source), complete.last, Seq(tx))
+    val budget = paymentCost + rewardCost - 1
+    budget should be > paymentCost
+    budget should be >= rewardCost
     val (input, ordering, invalid) = select(Seq(source), Seq(tx), Header.Interpreter60Version,
       maxCost = budget, protocolCost = budget)
     input shouldBe empty
@@ -273,12 +275,14 @@ class MatrixFeeSelectionSpec extends ErgoCorePropertyTest with ErgoCompilerHelpe
       val prefixSize = sectionSize(Seq(accepted))
       sectionSize(Seq(accepted) ++ complete) should be > prefixSize
       val prefixCost = transactionCost(Seq(source), accepted)
-      transactionCost(Seq(source), complete.head, Seq(accepted)) should be > 0
+      val rewardCost = transactionCost(Seq(source), complete.head, Seq(accepted))
+      val costBudget = prefixCost + rewardCost - 1
+      costBudget should be > prefixCost
       val (input, ordering, invalid) = select(Seq(source), Seq.empty, Header.Interpreter60Version,
         prefix = Seq(accepted),
         maxCost = if (limit == "cost") prefixCost else parameters.maxBlockCost,
         maxSize = if (limit == "size") prefixSize else parameters.maxBlockSize,
-        protocolCost = if (limit == "cost") prefixCost else parameters.maxBlockCost)
+        protocolCost = if (limit == "cost") costBudget else parameters.maxBlockCost)
       input shouldBe empty
       ordering shouldBe empty
       invalid shouldBe empty

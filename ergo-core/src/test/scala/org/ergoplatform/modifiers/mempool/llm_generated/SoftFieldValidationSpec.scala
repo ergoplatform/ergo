@@ -67,10 +67,11 @@ class SoftFieldValidationSpec extends ErgoCorePropertyTest {
     }
   }
 
-  property("reflection unwrapping observes its depth limit") {
+  property("reflection unwrapping has no arbitrary depth limit") {
     def wrapped(depth: Int): Throwable = (1 to depth).foldLeft[Throwable](
       new SoftFieldAccessException("minerPubKey")) { (cause, _) => new InvocationTargetException(cause) }
     failureReturnedBy(wrapped(16)) shouldBe a[SoftFieldsAccessError]
-    failureReturnedBy(wrapped(17)).isInstanceOf[SoftFieldsAccessError] shouldBe false
+    failureReturnedBy(wrapped(17)) shouldBe a[SoftFieldsAccessError]
+    failureReturnedBy(wrapped(64)) shouldBe a[SoftFieldsAccessError]
   }
 }

@@ -532,14 +532,14 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
   private object SoftFieldFailure {
     def unapply(error: Throwable): Option[SoftFieldAccessException] = {
       @scala.annotation.tailrec
-      def unwrap(current: Throwable, remaining: Int): Option[SoftFieldAccessException] = current match {
+      def unwrap(current: Throwable): Option[SoftFieldAccessException] = current match {
         case cause: SoftFieldAccessException => Some(cause)
-        case wrapper: InvocationTargetException if remaining > 0 =>
-          unwrap(wrapper.getTargetException, remaining - 1)
+        case wrapper: InvocationTargetException =>
+          unwrap(wrapper.getTargetException)
         case _ => None
       }
       // Only reflection wrappers are transparent; unrelated failures keep their normal rejection path.
-      unwrap(error, 16)
+      unwrap(error)
     }
   }
 

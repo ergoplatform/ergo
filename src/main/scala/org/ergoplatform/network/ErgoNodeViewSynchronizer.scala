@@ -158,9 +158,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private var lastCheckForModifiersToDownload: Long = 0L
 
-  // Header and sections of blocks this node mined and has not applied yet (at most the last 4): a mined block is
-  // announced before the node view holder applies it, so a peer's request can arrive before history has it
-  private val MinedBlocksToServe = 4
+  // Header and sections of the last block this node mined, while it is not applied yet: a mined block is announced
+  // before the node view holder applies it, so a peer's request can arrive before history has it. One is enough:
+  // CandidateGenerator takes a new solution only while no mined block is pending; a block posted through
+  // `POST /blocks` before history holds the last one replaces it here
+  private val MinedBlocksToServe = 1
   private var minedToServe: Vector[MinedBlock] = Vector.empty
 
   private def minedModifier(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] =
@@ -172,7 +174,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     minedToServe = minedToServe.filterNot(_.blockIds.contains(id))
 
   // history serves a header or section from the moment it holds it, also when the block does not become the best one
-  // (no LocalBlockApplied then); an id history never receives waits for the drops above or for 4 newer mined blocks
+  // (no LocalBlockApplied then); an id history never receives waits for the drops above or for the next mined block
   private def dropMinedHeld(id: ModifierId): Unit =
     minedToServe = minedToServe.map(block => block.copy(toServe = block.toServe - id)).filter(_.toServe.nonEmpty)
 
@@ -1436,7 +1438,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
                 getPeersForDownloadingHeaders(peer).toSeq
               } else {
-                getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+                // the peer that did not deliver may not have the section, so it is asked again only when it is the
+                // only download peer
+                val blockPeers = getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+                val otherPeers = blockPeers.filterNot(_ == peer)
+                if (otherPeers.nonEmpty) otherPeers else blockPeers
               }
               val newPeer = if (newPeerCandidates.isEmpty) {
                 if (checksDone > FallbackToEqualPeerThreshold) {

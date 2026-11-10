@@ -106,14 +106,35 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
 
   property("token quantities are aggregated by id") {
     val tokens = Array(tid1.toTokenId -> 2L, tid2.toTokenId -> 5L, tid1.toTokenId -> 3L)
-    TransactionBuilder.collTokensToMap(tokens.toColl) shouldBe Map(tid1 -> 5L, tid2 -> 5L)
-    TransactionBuilder.collTokensToMap(tokens.reverse.toColl) shouldBe Map(tid1 -> 5L, tid2 -> 5L)
-    TransactionBuilder.collTokensToMap(Array.empty[(TokenId, Long)].toColl) shouldBe Map.empty
+    TransactionBuilder.sumTokenAmounts(tokens.toColl) shouldBe Map(tid1 -> 5L, tid2 -> 5L)
+    TransactionBuilder.sumTokenAmounts(tokens.reverse.toColl) shouldBe Map(tid1 -> 5L, tid2 -> 5L)
+    TransactionBuilder.sumTokenAmounts(Array.empty[(TokenId, Long)].toColl) shouldBe Map.empty
+  }
+
+  property("collTokensToMap retains its existing duplicate-entry mapping") {
+    val tokens = Array(tid1.toTokenId -> 2L, tid1.toTokenId -> 3L)
+    TransactionBuilder.collTokensToMap(tokens.toColl) shouldBe Map(tid1 -> 3L)
+    TransactionBuilder.collTokensToMap(tokens.reverse.toColl) shouldBe Map(tid1 -> 2L)
   }
 
   property("token quantity aggregation uses checked addition") {
     val tokens = Array(tid1.toTokenId -> Long.MaxValue, tid1.toTokenId -> 1L)
-    an[ArithmeticException] should be thrownBy TransactionBuilder.collTokensToMap(tokens.toColl)
+    an[ArithmeticException] should be thrownBy TransactionBuilder.sumTokenAmounts(tokens.toColl)
+  }
+
+  property("output token totals keep repeated amounts within and across outputs") {
+    val first = boxCandidate(minBoxValue,
+      Seq(tid1.toTokenId -> 2L, tid1.toTokenId -> 3L))
+    val second = boxCandidate(minBoxValue,
+      Seq(tid1.toTokenId -> 4L, tid2.toTokenId -> 5L))
+    first.additionalTokens.length shouldBe 2
+    TransactionBuilder.collectOutputTokens(Seq(first, second)) shouldBe
+      Map(tid1 -> 9L, tid2 -> 5L)
+
+    val overflowing = boxCandidate(minBoxValue,
+      Seq(tid1.toTokenId -> Long.MaxValue, tid1.toTokenId -> 1L))
+    an[ArithmeticException] should be thrownBy
+      TransactionBuilder.collectOutputTokens(Seq(overflowing))
   }
 
   property("no fees") {

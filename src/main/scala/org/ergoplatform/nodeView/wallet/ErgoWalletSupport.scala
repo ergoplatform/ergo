@@ -288,7 +288,7 @@ trait ErgoWalletSupport extends ScorexLogging {
       .map(_.asInstanceOf[BurnTokensRequest])
       .flatMap(_.assetsToBurn)
     require(requestedBurnTokens.forall(_._2 > 0), "Non-positive burn asset value")
-    val burnTokensRequestMap = TransactionBuilder.collTokensToMap(requestedBurnTokens.toColl)
+    val burnTokensRequestMap = TransactionBuilder.sumTokenAmounts(requestedBurnTokens.toColl)
 
     //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
     requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)

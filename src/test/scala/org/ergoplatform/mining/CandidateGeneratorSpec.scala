@@ -1,7 +1,9 @@
 package org.ergoplatform.mining
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.pattern.{StatusReply, ask}
+import akka.pattern.{AskTimeoutException, StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
@@ -11,7 +13,9 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, RemoteBlockApplied, SemanticallyFailedModification}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
+  ChangedHistory, ChangedMempool, FullBlockApplied, LocalBlockApplied, RemoteBlockApplied, SemanticallyFailedModification
+}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -37,6 +41,7 @@ import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
@@ -1450,6 +1455,116 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     extraHeaders.headers.drop(h1.headersHeight).foldLeft(h1) { case (h, header) =>
       h.append(header).get._1
     }
+  }
+
+  it should "stop an expired candidate request while waiting for readers" in new TestKit(
+    ActorSystem()
+  ) {
+    val settings = testSettings(
+      s"${defaultSettings.directory}-waiting-readers-${System.currentTimeMillis()}"
+    )
+    val readersHolderProbe = TestProbe()
+    val viewHolderProbe = TestProbe()
+    val senderProbe = TestProbe()
+    val received = new AtomicInteger(0)
+    val candidateGenerator = system.actorOf(Props(new CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderProbe.ref,
+      viewHolderProbe.ref,
+      settings
+    ) {
+      override def receive: Receive = {
+        case command: GenerateCandidate =>
+          received.incrementAndGet()
+          super.receive.apply(command)
+        case other => super.receive.apply(other)
+      }
+    }))
+
+    readersHolderProbe.expectMsg(GetReaders)
+    val deadline = 700.millis.fromNow
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, retryDeadline = Some(deadline)),
+      senderProbe.ref
+    )
+    awaitAssert(assert(received.get() >= 1), 2.seconds, 25.millis)
+    awaitAssert(assert(!deadline.hasTimeLeft()), 2.seconds, 25.millis)
+    senderProbe.expectNoMessage(200.millis)
+    val receivedAfterExpiry = received.get()
+    senderProbe.expectNoMessage(500.millis)
+    received.get() shouldBe receivedAfterExpiry
+    system.terminate()
+  }
+
+  it should "stop expired retries and recover a live request before its deadline" in new TestKit(
+    ActorSystem()
+  ) {
+    val settings = testSettings(
+      s"${defaultSettings.directory}-candidate-deadline-${System.currentTimeMillis()}"
+    )
+    val viewHolderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+    val (txs2, _) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+    val staleHistory = historyWithBestFullBlock(Seq(block1))
+    val alignedHistory = applyChain(
+      HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        stateType = StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = 100
+      ),
+      Seq(block1, block2)
+    )
+    val attempts = new AtomicInteger(0)
+    val trackedState = new UtxoState(us2.persistentProver, us2.version, us2.store, settings) {
+      override def withTransactions(txs: Seq[ErgoTransaction]): UtxoState = {
+        attempts.incrementAndGet()
+        super.withTransactions(txs)
+      }
+    }
+    val readers = Readers(staleHistory, trackedState, ErgoMemPool.empty(settings), walletStub)
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    awaitAssert(assert(attempts.get() >= 1), 3.seconds, 100.millis)
+    attempts.set(0)
+    val expiredTimeout = Timeout(300.millis)
+    val expiredAsk = candidateGenerator.askWithStatus(
+      GenerateCandidate(Seq.empty, reply = true, forced = false,
+        retryDeadline = Some(expiredTimeout.duration.fromNow))
+    )(expiredTimeout)
+    intercept[AskTimeoutException] {
+      Await.result(expiredAsk, 2.seconds)
+    }
+    awaitAssert(assert(attempts.get() >= 1), 2.seconds, 100.millis)
+    viewHolderProbe.expectNoMessage(300.millis)
+    val attemptsAfterExpiry = attempts.get()
+    viewHolderProbe.expectNoMessage(1200.millis)
+    attempts.get() shouldBe attemptsAfterExpiry
+
+    val liveTimeout = Timeout(900.millis)
+    val liveAsk = candidateGenerator.askWithStatus(
+      GenerateCandidate(Seq.empty, reply = true, forced = false,
+        retryDeadline = Some(liveTimeout.duration.fromNow))
+    )(liveTimeout)
+    awaitAssert(assert(attempts.get() > attemptsAfterExpiry), 300.millis, 20.millis)
+    candidateGenerator ! ChangedHistory(alignedHistory)
+    Await.result(liveAsk, 2.seconds) shouldBe a[Candidate]
+    system.terminate()
   }
 
   it should "exclude applied transactions from stale mempool and not eliminate them" in new TestKit(

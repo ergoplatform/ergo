@@ -112,10 +112,14 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
   class MinerStub extends Actor {
     def receive: Receive = {
-      case CandidateGenerator.GenerateCandidate(_, reply, _, _) =>
+      case CandidateGenerator.GenerateCandidate(_, reply, _, _, retryDeadline) =>
         if (reply) {
-          val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
-          sender() ! StatusReply.success(candidate)
+          if (retryDeadline.isEmpty) {
+            sender() ! StatusReply.error("Missing mining candidate request deadline")
+          } else {
+            val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
+            sender() ! StatusReply.success(candidate)
+          }
         }
       case _: AutolykosSolution => sender() ! StatusReply.success(())
       case ErgoMiner.ReadMinerPk => sender() ! StatusReply.success(pk)

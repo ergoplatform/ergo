@@ -6,7 +6,13 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.ProofsTypeId
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import org.ergoplatform.network.message.{Message, MessageSerializer, ModifiersData, ModifiersSpec}
+import org.ergoplatform.network.message.{
+  InvSpec,
+  Message,
+  MessageSerializer,
+  ModifiersData,
+  ModifiersSpec
+}
 import scorex.util.bytesToId
 import scorex.util.encode.Base16
 
@@ -82,6 +88,20 @@ class ModifiersSpecification extends ErgoCorePropertyTest {
     // what a node writes for a modifier above its message limit: type id + count 0
     val zeroCount = Array[Byte](ProofsTypeId.value, 0: Byte)
     ModifiersSpec.parseBytesTry(zeroCount).get.modifiers shouldBe empty
+  }
+
+  property("a Modifiers message with more modifiers than a request can hold is rejected") {
+    // the modifiers are empty, so the message stays far below the size limit
+    def message(count: Int): Array[Byte] = {
+      val modifiers = (1 to count).map { i =>
+        bytesToId(Ints.toByteArray(i) ++ new Array[Byte](28)) -> Array.emptyByteArray
+      }
+      ModifiersSpec.toBytes(ModifiersData(ProofsTypeId.value, modifiers.toMap))
+    }
+
+    val limit = InvSpec.maxInvObjects
+    ModifiersSpec.parseBytesTry(message(limit)).get.modifiers.size shouldBe limit
+    ModifiersSpec.parseBytesTry(message(limit + 1)).isFailure shouldBe true
   }
 
   property("singleModifierFits agrees with the serializer at the size limit") {

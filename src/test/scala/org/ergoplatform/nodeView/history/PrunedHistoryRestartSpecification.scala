@@ -86,4 +86,44 @@ class PrunedHistoryRestartSpecification extends ErgoCorePropertyTest {
       _.writeMinimalFullBlockHeight(30 - BlocksToKeep + 1))
   }
 
+  property("continue from the common ancestor after a restart, when an earlier start stored a floor above the " +
+    "best full block and that block is on a fork") {
+    // adapted from #2922: full blocks 1..3, then 4..5 on a fork; the best headers chain forks at 3 and reaches 30
+    val settings = prunedHistorySettings(initSettings.chainSettings.voting.votingLength, utxoBootstrap = false)
+    var history = ErgoHistory.readOrGenerate(settings)(null)
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    history.isHeadersChainSyncedVar = true
+    val prefix = genChain(3)
+    val fork = genChain(2, prefix.last).tail // heights 4..5
+    val best = genChain(27, prefix.last).tail // heights 4..30
+    def at(h: Int) = best(h - 4)
+    def sections(h: Int) = at(h).header.sectionIds.map(_._2)
+
+    (prefix ++ fork).foreach(b => history = applyBlock(history, b))
+    history = applyHeaderChain(history, HeaderChain(best.init.map(_.header)))
+    history.writeMinimalFullBlockHeight(30 - BlocksToKeep + 1) // what the headers-synced latch of an earlier version writes
+    history.closeStorage()
+
+    history = ErgoHistory.readOrGenerate(settings)(null)
+    history.isHeadersChainSynced shouldBe false
+    history = applyHeaderChain(history, HeaderChain(Seq(best.last.header)))
+    history.isHeadersChainSynced shouldBe true
+    history.bestFullBlockOpt.map(_.header) shouldBe Some(fork.last.header)
+
+    // the best chain's blocks from 4 up are needed: the floor goes to the common ancestor + 1, and block 4 is requested
+    history.readMinimalFullBlockHeight() shouldBe 4
+    history.nextModifiersToDownload(100, (_, _) => true).values.flatten.toSet should contain allElementsOf sections(4)
+    history.applicableTry(at(4).blockTransactions) shouldBe 'success
+    best.foreach(b => history = applyBlock(history, b))
+    history.bestFullBlockOpt.map(_.header) shouldBe Some(best.last.header)
+
+    val floor = history.readMinimalFullBlockHeight()
+    val windowStart = 30 - BlocksToKeep + 1
+    val votingLength = initSettings.chainSettings.voting.votingLength
+    floor shouldBe (if (windowStart > votingLength) windowStart - windowStart % votingLength else windowStart)
+    (4 until floor).filter(h => sections(h).exists(history.contains)) shouldBe empty
+    (floor to 30).filterNot(h => sections(h).forall(history.contains)) shouldBe empty
+    history.closeStorage()
+  }
+
 }

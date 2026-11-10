@@ -124,6 +124,99 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
     }
   }
 
+  property("rent scan resumes exclusively after an existing or deleted cursor row") {
+    val localSettings = settings.copy(directory = Files.createTempDirectory("rent-scan-cursor").toString)
+    val storage = HistoryStorage(localSettings)
+    val rows = Array(new StorageRentBox(10, 1L), new StorageRentBox(10, 2L),
+      new StorageRentBox(20, 3L), new StorageRentBox(30, 4L))
+    try {
+      storage.insertExtra(Array.empty, rows.map(row => row: ExtraIndex))
+      // A foreign 32-byte key inside the rent marker namespace must not truncate
+      // the resumed suffix between its height-10 and height-20 eligibility rows.
+      val foreignKey = StorageRentBox.key(15, 0L) ++ Array.fill[Byte](19)(0)
+      storage.insertExtra(Array(foreignKey -> Array[Byte](1)), Array.empty)
+      def scan(cutoff: Int, limit: Int, after: StorageRentBox): Seq[Long] =
+        storage.storageRentBoxesAtOrBefore(cutoff, limit, Some(after)).map(_.globalIndex).toSeq
+
+      scan(30, 1, rows(0)) shouldBe Seq(2L)
+      scan(20, 10, rows(0)) shouldBe Seq(2L, 3L)
+      storage.removeExtra(Array(rows(0).id))
+      scan(20, 10, rows(0)) shouldBe Seq(2L, 3L)
+      scan(10, 10, rows(2)) shouldBe empty
+      scan(30, 10, rows.last) shouldBe empty
+      scan(30, 0, rows(0)) shouldBe empty
+    } finally {
+      storage.close()
+    }
+  }
+
+  property("bounded rent page seeks past newly indexed backdated rows in one height") {
+    val localSettings = settings.copy(directory = Files.createTempDirectory("rent-scan-fence").toString)
+    val storage = HistoryStorage(localSettings)
+    try {
+      val older = Array(new StorageRentBox(10, 1L), new StorageRentBox(10, 2L),
+        new StorageRentBox(20, 3L))
+      storage.insertExtra(Array.empty, older.map(row => row: ExtraIndex))
+      val first = storage.storageRentScanPage(20, 3L, None, 2)
+      first.entries.map(_.globalIndex).toSeq shouldBe Seq(1L, 2L)
+      first.exhausted shouldBe false
+
+      // These outputs arrive after the sweep starts but carry an old R3 height.
+      val backdated = (4L to 500L).map(i => new StorageRentBox(10, i))
+      storage.insertExtra(Array.empty, backdated.map(row => row: ExtraIndex).toArray)
+      val second = storage.storageRentScanPage(20, 3L, first.nextKey, 2)
+      second.entries.map(_.globalIndex).toSeq shouldBe Seq(3L)
+      second.exhausted shouldBe false
+      storage.storageRentScanPage(20, 3L, second.nextKey, 2).exhausted shouldBe true
+    } finally storage.close()
+  }
+
+  property("bounded rent page resumes after foreign keys with no accepted rows") {
+    val localSettings = settings.copy(directory = Files.createTempDirectory("rent-scan-foreign").toString)
+    val storage = HistoryStorage(localSettings)
+    try {
+      val rentRows = Array(new StorageRentBox(10, 1L), new StorageRentBox(20, 2L))
+      storage.insertExtra(Array.empty, rentRows.map(row => row: ExtraIndex))
+      val foreign = (1L to 5L).map(i =>
+        (StorageRentBox.key(15, i) ++ Array.fill[Byte](19)(0)) -> Array[Byte](1))
+      storage.insertExtra(foreign.toArray, Array.empty[ExtraIndex])
+
+      val first = storage.storageRentScanPage(20, 2L, None, 1)
+      first.entries.map(_.globalIndex).toSeq shouldBe Seq(1L)
+      val second = storage.storageRentScanPage(20, 2L, first.nextKey, 2)
+      second.entries shouldBe empty
+      second.exhausted shouldBe false
+      val third = storage.storageRentScanPage(20, 2L, second.nextKey, 2)
+      third.entries shouldBe empty
+      third.exhausted shouldBe false
+      val fourth = storage.storageRentScanPage(20, 2L, third.nextKey, 2)
+      fourth.entries.map(_.globalIndex).toSeq shouldBe Seq(2L)
+    } finally storage.close()
+  }
+
+  property("bounded rent page counts foreign keys between returned rent rows") {
+    val localSettings = settings.copy(directory = Files.createTempDirectory("rent-scan-mixed").toString)
+    val storage = HistoryStorage(localSettings)
+    try {
+      val rentRows = Array(new StorageRentBox(10, 1L), new StorageRentBox(10, 2L),
+        new StorageRentBox(20, 3L))
+      storage.insertExtra(Array.empty, rentRows.map(row => row: ExtraIndex))
+      val foreign = Array(1.toByte, 2.toByte).map(suffix =>
+        (rentRows.head.serializedId ++ Array.fill[Byte](19)(suffix)) -> Array[Byte](1))
+      storage.insertExtra(foreign, Array.empty[ExtraIndex])
+
+      // The first page visits one rent row and both filtered 32-byte keys, not three rent rows.
+      val first = storage.storageRentScanPage(20, 3L, None, 3)
+      first.entries.map(_.globalIndex).toSeq shouldBe Seq(1L)
+      first.exhausted shouldBe false
+      first.nextKey.exists(_.sameElements(foreign.last._1 ++ Array(0.toByte))) shouldBe true
+
+      val second = storage.storageRentScanPage(20, 3L, first.nextKey, 3)
+      second.entries.map(_.globalIndex).toSeq shouldBe Seq(2L, 3L)
+      second.exhausted shouldBe true
+    } finally storage.close()
+  }
+
   property("recursive extra index deletion propagates a file failure") {
     val root = Files.createTempDirectory("extra-index-delete-failure")
     val sentinel = Files.createFile(root.resolve("sentinel"))

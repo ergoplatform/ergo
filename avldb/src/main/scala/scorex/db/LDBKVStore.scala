@@ -6,6 +6,11 @@ import scorex.util.ScorexLogging
 import scala.util.{Failure, Success, Try}
 import spire.syntax.all.cfor
 
+/** A bounded raw-key scan. `nextKey` is an inclusive seek key for the next page. */
+final case class LDBScanPage(rows: Array[(Array[Byte], Array[Byte])],
+                             nextKey: Option[Array[Byte]],
+                             exhausted: Boolean)
+
 
 /**
   * A LevelDB wrapper providing a convenient non-versioned database interface.
@@ -96,6 +101,56 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
       i.close()
     }
     res.toArray
+  }
+
+  /**
+    * Visit at most `limit` raw keys, including rejected keys. A caller may seek past an
+    * ordered range with `skipTo`; its target must sort strictly after the current key.
+    * The returned seek key retains progress even when no rows pass `keyFilter`.
+    */
+  def scanPageFrom(first: K,
+                   limit: Int,
+                   keyFilter: K => Boolean,
+                   continueScan: K => Boolean,
+                   skipTo: K => Option[K]): LDBScanPage = {
+    if (limit <= 0) return LDBScanPage(Array.empty[(K, V)], Some(first), exhausted = false)
+    val i = db.iterator()
+    val rows = scala.collection.mutable.ArrayBuffer.empty[(K, V)]
+    var nextKey: Option[K] = Some(first)
+    var exhausted = false
+    try {
+      i.seek(first)
+      var visited = 0
+      var proceed = true
+      while (proceed && visited < limit) {
+        if (!i.hasNext) {
+          exhausted = true
+          proceed = false
+        } else {
+          val entry = i.next()
+          val key = entry.getKey
+          visited += 1
+          if (!continueScan(key)) {
+            exhausted = true
+            proceed = false
+          } else {
+            skipTo(key) match {
+              case Some(target) =>
+                nextKey = Some(target)
+                if (visited < limit) i.seek(target)
+              case None =>
+                if (keyFilter(key)) rows += ((key, entry.getValue))
+                // Appending a zero byte seeks strictly after this exact key, including
+                // when it has been deleted before the next page.
+                nextKey = Some(key ++ Array(0.toByte))
+            }
+          }
+        }
+      }
+    } finally {
+      i.close()
+    }
+    LDBScanPage(rows.toArray, if (exhausted) None else nextKey, exhausted)
   }
 
   /**

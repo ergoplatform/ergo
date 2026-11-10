@@ -2602,7 +2602,15 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       afterTimeout.collect { case PenalizePeer(_, p) => p } shouldBe empty
 
       // B later announces the same tx; the node requests it from B
-      invTxAndExpectRequest(announcerB, tx)
+      val invData = InvData(ErgoTransaction.modifierTypeId, Seq(tx.id))
+      synchronizerRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(announcerB))
+      val requestedFrom = ncProbe.fishForSpecificMessage(5.seconds) {
+        case SendToNetwork(msg, SendToPeer(to)) if msg.spec.messageCode == RequestModifierSpec.messageCode && {
+          val requested = msg.data.get.asInstanceOf[InvData]
+          requested.typeId == ErgoTransaction.modifierTypeId && requested.ids.contains(tx.id)
+        } => to
+      }
+      requestedFrom shouldBe announcerB
     }
   }
 }

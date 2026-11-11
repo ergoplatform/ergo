@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandida
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
@@ -832,7 +833,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
       }
     }
     history.bestFullBlockOpt.value shouldBe mainFork.last
-    history.isInBestFullChain(betterFork.last.id) shouldBe false
+    history.asInstanceOf[FullBlockProcessor].isInBestFullChain(betterFork.last.id) shouldBe false
 
     // Append betterFork(0), still missing betterFork(1) -> should not switch best full block yet
     betterFork.head.blockSections.foreach { sec =>
@@ -855,8 +856,8 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     finalInfo.toRemove should contain theSameElementsInOrderAs mainFork
     finalInfo.toApply should contain theSameElementsInOrderAs betterFork
     history.bestFullBlockOpt.value shouldBe betterFork.last
-    history.isInBestFullChain(betterFork.last.id) shouldBe true
-    history.isInBestFullChain(mainFork.last.id) shouldBe false
+    history.asInstanceOf[FullBlockProcessor].isInBestFullChain(betterFork.last.id) shouldBe true
+    history.asInstanceOf[FullBlockProcessor].isInBestFullChain(mainFork.last.id) shouldBe false
   }
 
 }

@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, Cancellable, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
@@ -11,10 +11,18 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Algos, ErgoSettings, NetworkSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsHealthy, ChainIsStuck, GetNodeViewChanges, IsChainHealthy, ModifiersFromRemote, TransactionFromRemote}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{
+  ChainIsHealthy,
+  ChainIsStuck,
+  GetNodeViewChanges,
+  IsChainHealthy,
+  ModifiersFromRemote,
+  ModifiersFromRemoteProcessed,
+  TransactionFromRemote
+}
 import scorex.core.network.ModifiersStatus.Requested
 import org.ergoplatform.core.idsToString
-import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
+import scorex.core.network.NetworkController.ReceivableMessages.{MessageProcessed, PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
 import org.ergoplatform.network.message._
@@ -185,6 +193,43 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var modifiersCacheSize: Int = 0
 
   /**
+    * Number of `ModifiersFromRemote` batches sent to `ErgoNodeViewHolder` and not yet acknowledged.
+    * Used to defer per-peer `MessageProcessed` credits and throttle proactive download triggers when the view holder
+    * lags (`Inv`-driven requests and `CheckDelivery` re-requests are not gated by this counter).
+    */
+  private var inFlightViewHolderBatches: Int = 0
+  private var insidePeerMessageHandling: Boolean = false
+  private var remoteModifierBatchesDispatchedInCurrentMsg: Int = 0
+  private val pendingViewHolderAcks = mutable.Queue[Option[(ActorRef, MessageProcessed)]]()
+  private val readSuspendedPeers = mutable.Map[ActorRef, Long]()
+
+  private[network] def inFlightViewHolderBatchesCount: Int = inFlightViewHolderBatches
+
+  private def isViewHolderBackpressured: Boolean =
+    inFlightViewHolderBatches >= MaxInFlightViewHolderBatches
+
+  private def sendModifiersToViewHolder(modifiers: Iterable[BlockSection]): Unit = {
+    inFlightViewHolderBatches += 1
+    if (insidePeerMessageHandling) {
+      remoteModifierBatchesDispatchedInCurrentMsg += 1
+    } else {
+      pendingViewHolderAcks.enqueue(None)
+    }
+    viewHolderRef ! ModifiersFromRemote(modifiers)
+  }
+
+  private def completeViewHolderBatch(): Unit = {
+    if (inFlightViewHolderBatches > 0) {
+      inFlightViewHolderBatches -= 1
+    }
+    if (pendingViewHolderAcks.nonEmpty) {
+      pendingViewHolderAcks.dequeue().foreach { case (target, ack) =>
+        target ! ack
+      }
+    }
+  }
+
+  /**
     * UTXO set snapshot manifests found in the p2p are stored in this table. The table is cleared when a manifest
     * is found which available for downloading from at least min number of peers required (the min is provided in
     * ergo.node.utxo.p2pUtxoSnapshots setting)
@@ -325,9 +370,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     val toDownloadCheckInterval = networkSettings.syncInterval
 
-    // register as a listener for peers got connected (handshaked) or disconnected
+    // register as a listener for peers got connected (handshaked), disconnected, or read-suspended/resumed
     context.system.eventStream.subscribe(self, classOf[HandshakedPeer])
     context.system.eventStream.subscribe(self, classOf[DisconnectedPeer])
+    context.system.eventStream.subscribe(self, classOf[PeerReadSuspended])
+    context.system.eventStream.subscribe(self, classOf[PeerReadResumed])
 
     // subscribe for all the node view holder events involving modifiers and transactions
     context.system.eventStream.subscribe(self, classOf[ChangedHistory])
@@ -349,6 +396,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val healthCheckDelay = settings.nodeSettings.acceptableChainUpdateDelay
     val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 3
     context.system.scheduler.scheduleAtFixedRate(healthCheckDelay, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
+  }
+
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    // Release parked acks so peers do not remain blocked across a synchronizer restart. Any in-flight
+    // ModifiersFromRemoteProcessed replies from pre-restart batches may release up to that many post-restart
+    // credits early before the counter self-heals once the queue drains.
+    while (pendingViewHolderAcks.nonEmpty) {
+      pendingViewHolderAcks.dequeue().foreach { case (target, ack) =>
+        target ! ack
+      }
+    }
+    inFlightViewHolderBatches = 0
+    readSuspendedPeers.clear()
+    super.preRestart(reason, message)
   }
 
   protected def broadcastModifierInv(modTypeId: NetworkObjectTypeId.Value, modId: ModifierId): Unit = {
@@ -589,7 +650,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // Unknown -> Received -> Unknown (on recoverable failure).
         log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
         deliveryTracker.setReceivedDirectly(continuationHeader.id, Header.modifierTypeId, peer)
-        viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
+        sendModifiersToViewHolder(Seq(continuationHeader))
         val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
         log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
         modifiersToDownload.foreach {
@@ -655,7 +716,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     modifierIds.foreach { modifierId =>
       deliveryTracker.setRequested(modifierTypeId, modifierId, peer, checksDone) { deliveryCheck =>
-        context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+        scheduleDeliveryCheck(peer, deliveryCheck, deliveryTimeout)
       }
     }
   }
@@ -676,9 +737,41 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private def deliveryTimeoutForType(modifierTypeId: NetworkObjectTypeId.Value): FiniteDuration =
+    if (modifierTypeId == UtxoSnapshotChunkTypeId.value) 4 * deliveryTimeout else deliveryTimeout
+
+  private def scheduleDeliveryCheck(peer: ConnectedPeer,
+                                    deliveryCheck: CheckDelivery,
+                                    timeout: FiniteDuration): Cancellable = {
+    if (readSuspendedPeers.contains(peer.handlerRef)) {
+      Cancellable.alreadyCancelled
+    } else {
+      context.system.scheduler.scheduleOnce(timeout, self, deliveryCheck)
+    }
+  }
+
+  private def onPeerReadSuspended(handlerRef: ActorRef): Unit = {
+    if (!readSuspendedPeers.contains(handlerRef)) {
+      readSuspendedPeers.put(handlerRef, System.currentTimeMillis())
+      deliveryTracker.pauseRequestedForPeer(handlerRef)
+    }
+  }
+
+  private def onPeerReadResumed(handlerRef: ActorRef): Unit = {
+    readSuspendedPeers.remove(handlerRef).foreach { suspendedAt =>
+      val now = System.currentTimeMillis()
+      deliveryTracker.resumeRequestedForPeer(handlerRef, suspendedAt, now) { (typeId, id, shiftedInfo) =>
+        val timeout = deliveryTimeoutForType(typeId)
+        val elapsed = math.max(0L, now - shiftedInfo.requestTime)
+        val remainingMillis = math.max(1L, timeout.toMillis - elapsed)
+        context.system.scheduler.scheduleOnce(remainingMillis.millis, self, CheckDelivery(shiftedInfo.peer, typeId, id))
+      }
+    }
+  }
+
   private def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
     deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer) { deliveryCheck =>
-      context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+      scheduleDeliveryCheck(peer, deliveryCheck, deliveryTimeout)
     }
     val msg = Message(GetManifestSpec, Right(manifestId), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
@@ -688,7 +781,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // as we download multiple chunks in parallel and they can be quite large, timeout increased
     val chunkDeliveryTimeout = 4 * deliveryTimeout
     deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer) { deliveryCheck =>
-      context.system.scheduler.scheduleOnce(chunkDeliveryTimeout, self, deliveryCheck)
+      scheduleDeliveryCheck(peer, deliveryCheck, chunkDeliveryTimeout)
     }
     val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
@@ -697,7 +790,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) =>
       log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
-      if (modifiersToFetch.nonEmpty) {
+      if (modifiersToFetch.nonEmpty && !isViewHolderBackpressured) {
         requestDownload(
           maxModifiers = deliveryTracker.modifiersToDownload,
           minModifiersPerBucket,
@@ -813,7 +906,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (valid.nonEmpty) {
           log.debug(s"Sending ${valid.size} modifiers to view holder, vh cache size: $modifiersCacheSize")
           modifiersCacheSize += valid.size // we increase estimated cache size now, before getting a precise number
-          viewHolderRef ! ModifiersFromRemote(valid)
+          sendModifiersToViewHolder(valid)
           // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header]) {
             val syncInfo = if (syncV2Supported(remote)) {
@@ -1399,7 +1492,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   protected def checkDelivery(hr: ErgoHistory): Receive = {
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
-      if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
+      if (readSuspendedPeers.contains(peer.handlerRef)) {
+        // Peer socket reading is suspended under local backpressure; its delivery deadline is paused
+        // and will be rescheduled when PeerReadResumed arrives.
+      } else if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
         // If transaction not delivered on time, we just forget about it.
         // It could be removed from other peer's mempool, so no reason to penalize the peer.
         if (modifierTypeId == ErgoTransaction.modifierTypeId) {
@@ -1505,6 +1601,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
       txsInProcessing -= connectedPeer
+      readSuspendedPeers -= connectedPeer.handlerRef
+
+    case PeerReadSuspended(handlerRef) =>
+      onPeerReadSuspended(handlerRef)
+
+    case PeerReadResumed(handlerRef) =>
+      onPeerReadResumed(handlerRef)
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -1514,7 +1617,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 
   protected def processDataFromPeer(msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit]): Receive = {
-    case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
+    case msg@Message(spec, Left(msgBytes), Some(source)) =>
+      val replyTo = sender()
+      val ackOpt =
+        if (replyTo != ActorRef.noSender && replyTo != self) {
+          Some(replyTo -> MessageProcessed(source, msg.messageLength))
+        } else {
+          None
+        }
+      insidePeerMessageHandling = true
+      remoteModifierBatchesDispatchedInCurrentMsg = 0
+      try {
+        parseAndHandle(msgHandlers, spec, msgBytes, source)
+      } finally {
+        val dispatched = remoteModifierBatchesDispatchedInCurrentMsg
+        remoteModifierBatchesDispatchedInCurrentMsg = 0
+        insidePeerMessageHandling = false
+        if (dispatched == 0) {
+          ackOpt.foreach { case (target, ack) => target ! ack }
+        } else {
+          (1 until dispatched).foreach(_ => pendingViewHolderAcks.enqueue(None))
+          pendingViewHolderAcks.enqueue(ackOpt)
+        }
+      }
   }
 
 
@@ -1596,9 +1721,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
+    case ModifiersFromRemoteProcessed =>
+      val wasBackpressured = isViewHolderBackpressured
+      completeViewHolderBatch()
+      if (wasBackpressured && !isViewHolderBackpressured) {
+        requestMoreModifiers(historyReader)
+      }
+
     case CheckModifiersToDownload =>
       val now = System.currentTimeMillis()
-      if (now - lastCheckForModifiersToDownload >= 50) { // do not process command more often than every 50 ms
+      if (!isViewHolderBackpressured && now - lastCheckForModifiersToDownload >= 50) { // do not process command more often than every 50 ms
         lastCheckForModifiersToDownload = now
         // Snapshot discovery uses snapshot-capable peers, which need not serve old block sections.
         val snapshotInfoNeeded = settings.nodeSettings.utxoSettings.utxoBootstrap &&
@@ -1762,7 +1894,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val modTypeId = cleared._1
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
       modifiersCacheSize = blockSectionsCacheSize
-      if (downloadMore) {
+      if (!isViewHolderBackpressured && downloadMore) {
         requestMoreModifiers(historyReader)
       }
 
@@ -1868,9 +2000,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case _ =>
           context.become(initializing(hr, mp, None, blockAppliedTxsCache))
       }
+    case ModifiersFromRemoteProcessed =>
+      completeViewHolderBatch()
+    case PeerReadSuspended(handlerRef) =>
+      onPeerReadSuspended(handlerRef)
+    case PeerReadResumed(handlerRef) =>
+      onPeerReadResumed(handlerRef)
     case msg =>
       // Actor not initialized yet, scheduling message until it is
-      context.system.scheduler.scheduleOnce(1.second, self, msg)
+      context.system.scheduler.scheduleOnce(1.second, self, msg)(context.dispatcher, sender())
   }
 
   override def receive: Receive = initializing(None, None, None, FixedSizeApproximateCacheQueue.empty(cacheQueueSize = 5))
@@ -1878,6 +2016,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+
+  /**
+    * Threshold of unacknowledged `ModifiersFromRemote` batches in flight to `ErgoNodeViewHolder` at which proactive
+    * modifier download waves (`CheckModifiersToDownload`, `DownloadRequest`, `BlockSectionsProcessingCacheUpdate`)
+    * are paused until `ModifiersFromRemoteProcessed` drops the count below `MaxInFlightViewHolderBatches`.
+    * This is a throttle on proactive download triggers, not a hard global admission cap: `Inv`-driven requests
+    * (`processInv`), `CheckDelivery` re-requests, and already-requested deliveries are not gated by this counter
+    * (inbound messages are bounded per peer by `PeerConnectionHandler`).
+    */
+  private[network] val MaxInFlightViewHolderBatches = 32
 
   /**
     * Max number of declined transaction ids kept to not ask peers for the same transactions again. The table is

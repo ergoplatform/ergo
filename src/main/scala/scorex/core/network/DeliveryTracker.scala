@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import akka.actor.Cancellable
+import akka.actor.{ActorRef, Cancellable}
 import io.circe.{Encoder, Json}
 import org.ergoplatform.consensus.ContainsModifiers
 import org.ergoplatform.modifiers.NetworkObjectTypeId
@@ -127,6 +127,50 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
       val now = System.currentTimeMillis()
       val requestedInfo = RequestedInfo(supplier, cancellable, checksDone, now)
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
+    }
+
+  /**
+    * Cancel active delivery timeout timers for all modifiers currently in `Requested` state from `peerHandlerRef`
+    * while that peer's socket reading is suspended under local backpressure.
+    */
+  def pauseRequestedForPeer(peerHandlerRef: ActorRef): Unit =
+    tryWithLogging {
+      requested.valuesIterator.foreach { infoById =>
+        infoById.valuesIterator.foreach { info =>
+          if (info.peer.handlerRef == peerHandlerRef) {
+            info.cancellable.cancel()
+          }
+        }
+      }
+    }
+
+  /**
+    * Shift `requestTime` forward by the duration the peer's reading was suspended and reschedule delivery timeout
+    * timers for all modifiers still in `Requested` state from `peerHandlerRef`.
+    */
+  def resumeRequestedForPeer(peerHandlerRef: ActorRef,
+                             suspendedAt: Long,
+                             resumedAt: Long)
+                            (schedule: (NetworkObjectTypeId.Value, ModifierId, RequestedInfo) => Cancellable): Unit =
+    tryWithLogging {
+      val pauseDuration = math.max(0L, resumedAt - suspendedAt)
+      requested.keys.toList.foreach { typeId =>
+        requested.get(typeId).foreach { infoById =>
+          val updated = infoById.map {
+            case (id, info) if info.peer.handlerRef == peerHandlerRef =>
+              info.cancellable.cancel()
+              val effectiveRequestTime =
+                if (info.requestTime >= suspendedAt) resumedAt
+                else info.requestTime + pauseDuration
+              val shiftedInfo = info.copy(requestTime = effectiveRequestTime)
+              val newCancellable = schedule(typeId, id, shiftedInfo)
+              id -> shiftedInfo.copy(cancellable = newCancellable)
+            case other =>
+              other
+          }
+          requested.update(typeId, updated)
+        }
+      }
     }
 
   /**

@@ -11,7 +11,11 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import org.ergoplatform.network.{Handshake, PeerSpec, Version}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{
+  LocallyGeneratedModifierProcessed,
+  LocallyGeneratedTransaction
+}
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -128,6 +132,8 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
   class NodeViewStub extends Actor {
     def receive: Receive = {
+      case LocallyGeneratedModifier(pmod) =>
+        sender() ! LocallyGeneratedModifierProcessed(pmod.id)
       case LocallyGeneratedTransaction(utx) =>
         sender() ! new ProcessingOutcome.Accepted(utx, System.currentTimeMillis())
       case _ =>
@@ -136,6 +142,8 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
   class FailingNodeViewStub extends Actor {
     def receive: Receive = {
+      case LocallyGeneratedModifier(pmod) =>
+        sender() ! LocallyGeneratedModifierProcessed(pmod.id)
       case LocallyGeneratedTransaction(_) =>
         sender() ! new ProcessingOutcome.Invalidated(new Error("Transaction invalid"), System.currentTimeMillis())
       case _ =>

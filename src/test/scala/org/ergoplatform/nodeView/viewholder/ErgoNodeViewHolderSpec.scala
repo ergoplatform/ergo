@@ -1189,4 +1189,40 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  property("acknowledge ModifiersFromRemote and LocallyGeneratedModifier to external senders") {
+    val utxoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
+    new NodeViewFixture(utxoSettings, parameters).apply { fixture =>
+      import fixture._
+      import scala.concurrent.duration._
+
+      val (us, bh) = createUtxoState(settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+      val block2 = validFullBlock(Some(genesis), wusAfterGenesis)
+      us.closeStorage()
+
+      val caller = new TestProbe(actorSystem)
+
+      caller.send(nodeViewHolderRef, ModifiersFromRemote(Seq.empty))
+      caller.expectMsg(5.seconds, ModifiersFromRemoteProcessed)
+
+      caller.send(nodeViewHolderRef, ModifiersFromRemote(Seq(genesis.header)))
+      caller.expectMsg(5.seconds, ModifiersFromRemoteProcessed)
+
+      caller.send(nodeViewHolderRef, ModifiersFromRemote(genesis.mandatoryBlockSections))
+      caller.expectMsg(5.seconds, ModifiersFromRemoteProcessed)
+      getBestFullBlockOpt.map(_.id) shouldBe Some(genesis.id)
+
+      // In UTXO mode, omitting ADProofs causes UtxoState to generate and persist ADProofs via internal callback;
+      // only the external caller's LocallyGeneratedModifier messages should be acknowledged.
+      val localMods = block2.header +: block2.mandatoryBlockSections
+      localMods.foreach { mod =>
+        caller.send(nodeViewHolderRef, LocallyGeneratedModifier(mod))
+        caller.expectMsg(5.seconds, LocallyGeneratedModifierProcessed(mod.id))
+      }
+      caller.expectNoMessage(200.millis)
+      getBestFullBlockOpt.map(_.id) shouldBe Some(block2.id)
+    }
+  }
+
 }

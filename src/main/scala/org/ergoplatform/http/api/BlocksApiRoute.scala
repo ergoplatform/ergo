@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.NewBlockMined
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifierProcessed
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
@@ -138,12 +139,16 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       //       instead of event bus publish.
       context.eventStream.publish(NewBlockMined(block.header, block.blockSections))
 
-      viewHolderRef ! LocallyGeneratedModifier(block.header)
-      block.blockSections.foreach {
-        viewHolderRef ! LocallyGeneratedModifier(_)
+      // Hold the HTTP request open until the view holder finishes processing the header and sections
+      // (so Akka HTTP max-open-requests backpressures callers, cf. #1453). 200 OK promises that
+      // ErgoNodeViewHolder completed processLocallyGeneratedModifiers within scorex.restApi.timeout;
+      // if the holder lags past that timeout, the ask fails with 500 ("Ask timed out") while the block
+      // remains announced via NewBlockMined and queued in the holder's mailbox.
+      val modifiers = block.header +: block.blockSections
+      val processedF = Future.traverse(modifiers) { mod =>
+        (viewHolderRef ? LocallyGeneratedModifier(mod)).mapTo[LocallyGeneratedModifierProcessed]
       }
-
-      ApiResponse.OK
+      onSuccess(processedF)(_ => ApiResponse.OK)
     } else {
       BadRequest("Block is invalid")
     }

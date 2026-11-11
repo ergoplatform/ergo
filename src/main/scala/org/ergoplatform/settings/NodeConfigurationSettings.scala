@@ -54,6 +54,11 @@ case class NodeConfigurationSettings(override val stateType: StateType,
                                      storageRentTokenWhitelist: Seq[String] = Seq.empty,
                                      blacklistedTransactions: Seq[String] = Seq.empty,
                                      checkpoint: Option[CheckpointSettings] = None) extends ClientCapabilities {
+  ErgoSettings.validateTokenWhitelist(
+    s"${ErgoSettings.configPath}.node.storageRentTokenWhitelist",
+    storageRentTokenWhitelist
+  )
+
   /**
     * Whether the node keeping all the full blocks of the blockchain or not.
     * @return true if the blockchain is pruned, false if not

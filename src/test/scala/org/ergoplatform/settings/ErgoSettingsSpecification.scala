@@ -381,6 +381,52 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     }
   }
 
+  property("tokensWhitelist and storageRentTokenWhitelist entries must be 64 lower-case hex characters") {
+    val validId1 = "03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04"
+    val validId2 = "0123456789abcdef" * 4
+
+    def readHocon(hocon: String): ErgoSettings =
+      ErgoSettingsReader.fromConfig(ConfigFactory.parseString(hocon).withFallback(ConfigFactory.load()))
+
+    readHocon("ergo.wallet.tokensWhitelist = null").walletSettings.tokensWhitelist shouldBe None
+    readHocon("ergo.wallet.tokensWhitelist = []").walletSettings.tokensWhitelist shouldBe Some(Seq.empty)
+    readHocon(s"""ergo.wallet.tokensWhitelist = ["$validId1", "$validId2"]""")
+      .walletSettings.tokensWhitelist shouldBe Some(Seq(validId1, validId2))
+
+    readHocon("ergo.node.storageRentTokenWhitelist = []").nodeSettings.storageRentTokenWhitelist shouldBe Seq.empty
+    readHocon(s"""ergo.node.storageRentTokenWhitelist = ["$validId1", "$validId2"]""")
+      .nodeSettings.storageRentTokenWhitelist shouldBe Seq(validId1, validId2)
+
+    val malformedEntries = Seq(
+      "",
+      "example",
+      validId1.toUpperCase,
+      validId1.dropRight(1),
+      validId1 + "0",
+      validId1.dropRight(1) + "g"
+    )
+
+    Seq(
+      "ergo.wallet.tokensWhitelist",
+      "ergo.node.storageRentTokenWhitelist"
+    ).foreach { key =>
+      malformedEntries.foreach { bad =>
+        withClue(s"$key = ['$bad']: ") {
+          val err = the[IllegalArgumentException] thrownBy readHocon(s"""$key = ["$bad"]""")
+          err.getMessage should include(key)
+          err.getMessage should include(s"'$bad'")
+        }
+      }
+
+      val mixedErr = the[IllegalArgumentException] thrownBy readHocon(
+        s"""$key = ["$validId1", "example", "${validId2.toUpperCase}", "example"]"""
+      )
+      mixedErr.getMessage should include(key)
+      mixedErr.getMessage should include("'example', '" + validId2.toUpperCase + "'")
+      mixedErr.getMessage should not include s"'$validId1'"
+    }
+  }
+
   property("VotingTargets and consistentSettings validate voteable parameter ids when mining") {
     val validConfig = ConfigFactory
       .parseString(

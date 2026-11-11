@@ -19,6 +19,10 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           checkEIP27: Boolean = false,
                           profile: String = WalletProfile.User.label) {
 
+  tokensWhitelist.foreach(
+    ErgoSettings.validateTokenWhitelist(s"${ErgoSettings.configPath}.wallet.tokensWhitelist", _)
+  )
+
   val walletProfile: WalletProfile = WalletProfile.fromLabel(profile)
 
 }

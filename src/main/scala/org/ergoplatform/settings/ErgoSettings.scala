@@ -52,4 +52,16 @@ case class ErgoSettings(directory: String,
 object ErgoSettings {
   val configPath: String = "ergo"
   val scorexConfigPath: String = "scorex"
+
+  private def isLowerHex64(s: String): Boolean =
+    s.length == 64 && s.forall(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))
+
+  private[settings] def validateTokenWhitelist(settingKey: String, tokenIds: Seq[String]): Unit = {
+    val invalid = tokenIds.filterNot(isLowerHex64).distinct
+    require(
+      invalid.isEmpty,
+      s"$settingKey entries must be 64 lower-case hex characters (0-9a-f); " +
+        s"invalid value(s): ${invalid.map(id => s"'$id'").mkString(", ")}"
+    )
+  }
 }

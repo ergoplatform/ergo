@@ -2739,6 +2739,19 @@ components:
         error:
           type: string
 
+    ResetRequest:
+      description: Request body for resetting the blockchain to a retained positive height
+      type: object
+      required:
+        - height
+      properties:
+        height:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Target block height to reset the blockchain to
+          example: 1000
+
     ApiError:
       description: Error response from API
       type: object
@@ -3131,6 +3144,59 @@ paths:
           description: Persistent modifier object
         '404':
           description: Modifier with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/reset:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Reset blockchain to a specified height
+      description: >-
+        Rolls back state and wallet to the full block at the requested positive height
+        and removes all headers, block sections, height indexes, chain status markers,
+        and semantic validity entries above that height.
+      operationId: resetBlockchain
+      tags:
+        - blocks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetRequest'
+      responses:
+        '200':
+          description: Blockchain reset result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - message
+                  - resetHeight
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: 'Blockchain successfully reset from height 1500 to height 1000. All block sections and validity indices cleaned to ensure proper revalidation.'
+                  resetHeight:
+                    type: integer
+                    format: int32
+                    example: 1000
+        '400':
+          description: Invalid or unavailable reset height
           content:
             application/json:
               schema:

@@ -88,7 +88,7 @@ case class IndexedToken(tokenId: ModifierId,
    */
   override private[extra] def spendBox(iEb: IndexedErgoBox, historyOpt: Option[ErgoHistoryReader])(implicit ae: ErgoAddressEncoder): IndexedToken = {
     if(historyOpt.isDefined)
-      findAndModBox(iEb.globalIndex, historyOpt.get)
+      modBox(iEb.globalIndex, historyOpt.get, spend = true)
     this
   }
 
@@ -109,6 +109,8 @@ case class IndexedToken(tokenId: ModifierId,
   private[extra] def addEmissionAmount(plus: Long): IndexedToken = {
     val updated = IndexedToken(tokenId, boxId, Some(amount.getOrElse(0L) + plus), name, description, decimals, boxes)
     updated.buffer ++= buffer
+    updated.boxSegmentCount = boxSegmentCount
+    updated.txSegmentCount = txSegmentCount
     updated
   }
 

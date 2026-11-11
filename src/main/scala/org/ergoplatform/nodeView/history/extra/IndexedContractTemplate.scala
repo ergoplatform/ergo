@@ -42,7 +42,7 @@ case class IndexedContractTemplate(templateHash: ModifierId,
 
   override private[extra] def spendBox(iEb: IndexedErgoBox, historyOpt: Option[ErgoHistoryReader])(implicit ae: ErgoAddressEncoder): IndexedContractTemplate = {
     if (historyOpt.isDefined)
-      findAndModBox(iEb.globalIndex, historyOpt.get)
+      modBox(iEb.globalIndex, historyOpt.get, spend = true)
     this
   }
 

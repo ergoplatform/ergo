@@ -48,7 +48,8 @@ object NumericTxIndex {
     * @return transaction with given index, if found
     */
   def getTxByNumber(history: ErgoHistoryReader, n: Long): Option[IndexedErgoTransaction] =
-    history.typedExtraIndexById[IndexedErgoTransaction](history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n))).get.m)
+    history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n)))
+      .flatMap(ni => history.typedExtraIndexById[IndexedErgoTransaction](ni.m))
 }
 
 /**

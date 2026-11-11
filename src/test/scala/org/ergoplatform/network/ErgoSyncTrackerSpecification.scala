@@ -4,6 +4,7 @@ import org.ergoplatform.consensus.{Equal, Fork, Older, Unknown, Younger}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.core.network.{ConnectedPeer, ConnectionId, Incoming}
 import org.ergoplatform.network.peer.PeerInfo
+import scorex.util.{ModifierId, bytesToId}
 
 class ErgoSyncTrackerSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -138,8 +139,8 @@ class ErgoSyncTrackerSpecification extends ErgoCorePropertyTest {
     status.hasFullBlockAt(1000) shouldBe true
     status.hasFullBlockAt(1001) shouldBe false
 
-    val headerA = scorex.util.ModifierId @@ "a" * 64
-    val headerB = scorex.util.ModifierId @@ "b" * 64
+    val headerA: ModifierId = bytesToId(Array.fill(32)(1.toByte))
+    val headerB: ModifierId = bytesToId(Array.fill(32)(2.toByte))
     syncTracker.updateStatus(
       peer,
       Older,

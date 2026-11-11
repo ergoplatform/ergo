@@ -6078,6 +6078,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Create and register a scan to track P2S address provided
+      description: Uses the address (truncated to 255 characters if longer) as the scan name.
       operationId: scriptP2SRule
       tags:
         - scan

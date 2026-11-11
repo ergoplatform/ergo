@@ -6,7 +6,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, Pay2SAddress}
 import org.ergoplatform.http.api.ScanEntities.{ScanIdBoxId, ScanIdWrapper}
 import org.ergoplatform.http.api.{ApiCodecs, ScanApiRoute}
 import org.ergoplatform.nodeView.wallet.scanning._
@@ -17,7 +17,10 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random
-import sigma.ast.ByteArrayConstant
+import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.data.CAND
+import sigma.serialization.ErgoTreeSerializer
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._
 import scala.util.Try
@@ -280,6 +283,40 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     Post(prefix + "/p2sRule", "s7smJmdbakqfwNo") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "register a scan for a p2s address longer than 255 characters" in {
+    val pks = (1 to 7).map(i => DLogProverInput(java.math.BigInteger.valueOf(i.toLong)).publicImage)
+    val longTree = ErgoTree.fromSigmaBoolean(CAND(pks))
+    val longP2s = Pay2SAddress(longTree)(ergoSettings.addressEncoder).toString
+    longP2s.length should be > Scan.MaxScanNameLength
+
+    var plainId: Short = 0
+    Post(prefix + "/p2sRule", longP2s) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      plainId = responseAs[ScanIdWrapper].scanId
+    }
+
+    var jsonQuotedId: Short = 0
+    Post(prefix + "/p2sRule", longP2s.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      jsonQuotedId = responseAs[ScanIdWrapper].scanId
+    }
+
+    val expectedBytes = ByteArrayConstant(ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(longTree))
+    Get(prefix + "/listAll") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val scans = responseAs[Seq[Scan]]
+      Seq(plainId, jsonQuotedId).foreach { id =>
+        val registered = scans.find(_.scanId == id)
+        registered shouldBe defined
+        registered.foreach { scan =>
+          scan.scanName shouldBe longP2s.take(Scan.MaxScanNameLength)
+          scan.trackingRule shouldBe EqualsScanningPredicate(ErgoBox.R1, expectedBytes)
+          ScanSerializer.parseBytes(ScanSerializer.toBytes(scan)) shouldBe scan
+        }
+      }
     }
   }
 

@@ -318,6 +318,19 @@ class ErgoWalletActor(settings: ErgoSettings,
         }
       }
 
+    case RollbackForReset(version) =>
+      val result = if (state.secretStorageOpt.isDefined || settings.walletSettings.testMnemonic.isDefined) {
+        Try(state.registry.rollback(version)).flatten
+      } else {
+        Success(())
+      }
+      result match {
+        case Success(_) => context.become(loadedWallet(state.copy(outputsFilter = None, error = None)))
+        case Failure(error) =>
+          context.become(loadedWallet(state.copy(error = Some(s"Reset rollback failed: ${error.getMessage}"))))
+      }
+      sender() ! result
+
     case Rollback(version: VersionTag) =>
       // wallet must be initialized for wallet registry rollback
       if (state.secretStorageOpt.isDefined || settings.walletSettings.testMnemonic.isDefined) {

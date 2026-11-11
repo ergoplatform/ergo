@@ -49,6 +49,14 @@ class WalletVarsSpec extends ErgoCorePropertyTest {
       .ownsAddress(otherAddress) shouldBe true
     WalletVars(Some(primitiveProver), Seq.empty, Some(bothCache))
       .ownsAddress(otherAddress) shouldBe true
+
+    val cachedProver = ErgoProvingInterpreter(
+      IndexedSeq(defaultRootSecret, otherSecret),
+      parameters,
+      Some(IndexedSeq(defaultRootSecret.publicKey, otherSecret.publicKey))
+    )
+    WalletVars(Some(cachedProver), Seq.empty, Some(bothCache))
+      .ownsAddress(otherAddress) shouldBe true
   }
 
 }

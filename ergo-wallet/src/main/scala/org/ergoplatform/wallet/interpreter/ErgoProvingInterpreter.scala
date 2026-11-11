@@ -8,11 +8,12 @@ import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey
 import org.ergoplatform.validation.ValidationRules
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import scorex.util.encode.Base16
-import sigma.data.{AvlTreeData, SigmaBoolean, SigmaLeaf}
+import sigma.data.{AvlTreeData, CAND, COR, CTHRESHOLD, SigmaBoolean, SigmaLeaf}
 import sigma.interpreter.ContextExtension
 import sigma.validation.SigmaValidationSettings
+import sigmastate.UnprovenTree
 import sigmastate.crypto.SigmaProtocolPrivateInput
-import sigmastate.interpreter.ProverInterpreter
+import sigmastate.interpreter.{HintsBag, ProverInterpreter}
 import sigma.{Coll, Header, PreHeader}
 
 import java.util
@@ -43,10 +44,19 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                              val cachedHdPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]] = None)
   extends ErgoInterpreter(params) with ProverInterpreter {
 
+  private val allSecrets: IndexedSeq[SigmaProtocolPrivateInput[SigmaLeaf]] =
+    secretKeys.map(_.privateInput.asInstanceOf[SigmaProtocolPrivateInput[SigmaLeaf]])
+
+  private val scopedSecrets: ThreadLocal[Option[IndexedSeq[SigmaProtocolPrivateInput[SigmaLeaf]]]] =
+    new ThreadLocal[Option[IndexedSeq[SigmaProtocolPrivateInput[SigmaLeaf]]]] {
+      override def initialValue(): Option[IndexedSeq[SigmaProtocolPrivateInput[SigmaLeaf]]] = None
+    }
+
   /**
     * Interpreter's secrets, in form of sigma protocols private inputs
     */
-  val secrets: IndexedSeq[SigmaProtocolPrivateInput[_]] = secretKeys.map(_.privateInput.asInstanceOf[SigmaProtocolPrivateInput[SigmaLeaf]])
+  override def secrets: IndexedSeq[SigmaProtocolPrivateInput[SigmaLeaf]] =
+    scopedSecrets.get().getOrElse(allSecrets)
 
   /**
     * Only secrets corresponding to hierarchical deterministic scheme (BIP-32 impl)
@@ -60,12 +70,53 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
     case Some(cachedPubKeys) =>
       if (cachedPubKeys.length != hdKeys.length) {
         log.error(
-          s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${secrets.length}"
+          s"ErgoProverInterpreter: pubkeys and secrets of different sizes: ${cachedPubKeys.length} and ${allSecrets.length}"
         )
       }
       cachedPubKeys
     case None =>
       hdKeys.map(_.publicKey) // costly operation if there are many secret keys
+  }
+
+  private lazy val publicKeysWithSecrets: IndexedSeq[(SigmaBoolean, SigmaProtocolPrivateInput[SigmaLeaf])] = {
+    val useCachedHdPubKeys = hdPubKeys.length == hdKeys.length
+    var hdIdx = 0
+    secretKeys.indices.map { idx =>
+      val secret = allSecrets(idx)
+      secretKeys(idx) match {
+        case _: ExtendedSecretKey if useCachedHdPubKeys =>
+          val pubKey = hdPubKeys(hdIdx).key
+          hdIdx += 1
+          (pubKey: SigmaBoolean) -> secret
+        case _ =>
+          (secret.publicImage: SigmaBoolean) -> secret
+      }
+    }
+  }
+
+  override lazy val publicKeys: Seq[SigmaBoolean] = publicKeysWithSecrets.map(_._1)
+
+  private[ergoplatform] lazy val secretsByPublicImage: Map[SigmaBoolean, SigmaProtocolPrivateInput[SigmaLeaf]] =
+    publicKeysWithSecrets.toMap
+
+  private def extractLeaves(sb: SigmaBoolean): Seq[SigmaBoolean] = sb match {
+    case leaf: SigmaLeaf => Seq(leaf)
+    case CAND(children) => children.flatMap(extractLeaves)
+    case COR(children) => children.flatMap(extractLeaves)
+    case CTHRESHOLD(_, children) => children.flatMap(extractLeaves)
+    case _ => Seq.empty
+  }
+
+  override protected def prove(unprovenTree: UnprovenTree,
+                               message: Array[Byte],
+                               hintsBag: HintsBag): ProofT = {
+    val relevantSecrets = extractLeaves(unprovenTree.proposition).distinct.flatMap(secretsByPublicImage.get).toIndexedSeq
+    scopedSecrets.set(Some(relevantSecrets))
+    try {
+      super.prove(unprovenTree, message, hintsBag)
+    } finally {
+      scopedSecrets.remove()
+    }
   }
 
   /**
@@ -264,6 +315,11 @@ object ErgoProvingInterpreter {
   def apply(secrets: IndexedSeq[SecretKey],
             params: BlockchainParameters): ErgoProvingInterpreter =
     new ErgoProvingInterpreter(secrets, params)
+
+  def apply(secrets: IndexedSeq[SecretKey],
+            params: BlockchainParameters,
+            cachedHdPubKeysOpt: Option[IndexedSeq[ExtendedPublicKey]]): ErgoProvingInterpreter =
+    new ErgoProvingInterpreter(secrets, params, cachedHdPubKeysOpt)
 
   def apply(rootSecret: ExtendedSecretKey,
             params: BlockchainParameters): ErgoProvingInterpreter =

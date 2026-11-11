@@ -36,10 +36,12 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
 
   val publicKeyAddresses: Seq[P2PKAddress] = stateCacheOpt.map(_.publicKeyAddresses).getOrElse(Seq.empty)
 
+  private lazy val trackedPubKeySet = trackedPubKeys.iterator.map(_.key).toSet
+
   def ownsAddress(address: P2PKAddress): Boolean =
     proverOpt.exists { prover =>
-      val tracked = trackedPubKeys.exists(_.key.value.equals(address.pubkey.value))
-      val signable = prover.secrets.exists(_.publicImage.equals(address.pubkey))
+      val tracked = trackedPubKeySet.contains(address.pubkey)
+      val signable = prover.secretsByPublicImage.contains(address.pubkey)
       tracked && signable
     }
 

@@ -33,7 +33,7 @@ class HistoryStorageRemoveSpec extends AnyPropSpec with Matchers {
     f.objectsStore.removalBatches shouldBe Vector(Vector(ByteArrayWrapper(idToBytes(f.modifier.id))))
     f.indexStore.removalBatches shouldBe Vector(Vector(f.indexKey))
     f.storage.modifierById(f.modifier.id) shouldBe None
-    f.objectsStore.getCalls shouldBe 1
+    f.objectsStore.getCalls shouldBe 2 // 1 before-image snapshot during paired remove + 1 cache-miss read
     f.storage.getIndex(f.indexKey) shouldBe None
     f.indexStore.getCalls shouldBe 1
   }
@@ -47,12 +47,12 @@ class HistoryStorageRemoveSpec extends AnyPropSpec with Matchers {
     f.objectsStore.removalBatches shouldBe Vector(Vector(ByteArrayWrapper(idToBytes(f.modifier.id))))
     f.indexStore.removalBatches shouldBe empty
     f.storage.modifierById(f.modifier.id) shouldBe Some(f.modifier)
-    f.objectsStore.getCalls shouldBe 0
+    f.objectsStore.getCalls shouldBe 1 // 1 before-image snapshot during paired remove; modifierById hits cache
     f.storage.getIndex(f.indexKey) shouldBe Some(f.indexValue)
     f.indexStore.getCalls shouldBe 0
   }
 
-  property("remove propagates an index-store failure after invalidating only modifier caches") {
+  property("remove propagates an index-store failure and restores objectsStore without changing indexes") {
     val indexStoreFailure = new IllegalStateException("index-store failure")
     val f = fixture(indexRemoval = Failure(indexStoreFailure))
 
@@ -60,8 +60,8 @@ class HistoryStorageRemoveSpec extends AnyPropSpec with Matchers {
 
     f.objectsStore.removalBatches shouldBe Vector(Vector(ByteArrayWrapper(idToBytes(f.modifier.id))))
     f.indexStore.removalBatches shouldBe Vector(Vector(f.indexKey))
-    f.storage.modifierById(f.modifier.id) shouldBe None
-    f.objectsStore.getCalls shouldBe 1
+    f.storage.modifierById(f.modifier.id) shouldBe Some(f.modifier)
+    f.objectsStore.getCalls shouldBe 2 // 1 before-image snapshot + 1 reload of restored modifier after cache invalidation
     f.storage.getIndex(f.indexKey) shouldBe Some(f.indexValue)
     f.indexStore.getCalls shouldBe 0
   }
@@ -80,6 +80,8 @@ class HistoryStorageRemoveSpec extends AnyPropSpec with Matchers {
     val indexValue = Array[Byte](6, 7, 8)
 
     storage.insert(Array(indexKey -> indexValue), Array[BlockSection](modifier)) shouldBe Success(())
+    objectsStore.getCalls shouldBe 1
+    objectsStore.getCalls = 0
 
     Fixture(storage, objectsStore, indexStore, modifier, indexKey, indexValue)
   }

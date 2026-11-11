@@ -12,6 +12,7 @@ import scorex.util.{ModifierId, bytesToId}
 import sigma.data.ProveDlog
 
 import scala.concurrent.duration._
+import scala.util.Try
 
 class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -183,6 +184,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       }
 
       fromBigMempool.length should be > 2
+      fromBigMempool.map(_.encodedId).distinct.length shouldBe fromBigMempool.length
       fromBigMempool.map(_.size).sum should be < maxSize
       costs.sum should be < maxCost
       if (!withTokens) fromBigMempool.size should be < txsWithFees.size
@@ -436,5 +438,86 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     // a chain with only its first block gives one timestamp, so there is no interval to average
     CandidateGenerator.getBlockMiningTimeAvg(Vector(System.currentTimeMillis())) shouldBe Duration.Zero
     CandidateGenerator.getBlockMiningTimeAvg(Vector.empty) shouldBe Duration.Zero
+  }
+
+  property("collectTxs does not duplicate fee transaction when a zero-fee transaction follows a fee-paying transaction") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper
+    val us       = createUtxoState(bh, parameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    val inputs   = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).takeRight(4)
+    val feePayingTx = validTransactionFromBoxes(IndexedSeq(inputs.head), rnd, issueNew = false, feeProp)
+    val zeroFeeTx   = validTransactionFromBoxes(IndexedSeq(inputs(1)), rnd, issueNew = false)
+
+    val h = validFullBlock(None, us, bh, rnd).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val (collected, invalid) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      parameters.maxBlockCost,
+      parameters.maxBlockSize,
+      us,
+      upcomingContext,
+      Vector(feePayingTx, zeroFeeTx)
+    )
+
+    invalid shouldBe empty
+    collected.size shouldBe 3
+    collected.map(_.id).distinct.size shouldBe 3
+  }
+
+  property("collectTxs rejects a later tx spending an earlier tx's fee outputs and repeats no tx") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper
+    val us       = createUtxoState(bh, parameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    val input    = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).last
+    // every output of feePayingTx is a fee-proposition box (at least two of them)
+    val feePayingTx = validTransactionFromBoxes(IndexedSeq(input), rnd, issueNew = false, feeProp)
+    feePayingTx.outputs.size should be >= 2
+
+    val h = validFullBlock(None, us, bh, rnd).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    // a mempool tx spending all of feePayingTx's fee outputs to the miner: the miner's own fee tx
+    // with its inputs in reverse order, so a different transaction
+    val minersFeeTx = CandidateGenerator
+      .collectFees(us.stateContext.currentHeight, Seq(feePayingTx), defaultMinerPk, upcomingContext)
+      .get
+    val feeSpendingTx = ErgoTransaction(minersFeeTx.inputs.reverse, IndexedSeq(), minersFeeTx.outputCandidates)
+    feeSpendingTx.id should not be minersFeeTx.id
+    // on its own, after feePayingTx, it is a valid transaction
+    us.withTransactions(Seq(feePayingTx))
+      .validateWithCost(feeSpendingTx, upcomingContext, parameters.maxBlockCost, None) shouldBe 'success
+
+    val (collected, invalid) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      parameters.maxBlockCost,
+      parameters.maxBlockSize,
+      us,
+      upcomingContext,
+      Vector(feePayingTx, feeSpendingTx)
+    )
+    val applied = Try(us.applyModifier(validFullBlock(None, us, collected), None)(_ => ())).flatten
+    info(s"collected = ${collected.map(_.id)}; invalid = $invalid; block applies = ${applied.isSuccess}")
+
+    collected.map(_.id).distinct.size shouldBe collected.size
+    invalid shouldBe Seq(feeSpendingTx.id)
+    collected shouldBe Seq(feePayingTx, minersFeeTx)
+    applied shouldBe 'success
   }
 }

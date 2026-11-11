@@ -6,8 +6,10 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.ProofsTypeId
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import org.ergoplatform.network.message.{Message, MessageSerializer, ModifiersData, ModifiersSpec}
-import scorex.util.bytesToId
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.network.message.{InvSpec, Message, MessageSerializer, ModifiersData, ModifiersSpec}
+import scorex.util.{ByteArrayBuilder, bytesToId}
+import scorex.util.serialization.VLQByteBufferWriter
 import scorex.util.encode.Base16
 
 /**
@@ -96,6 +98,33 @@ class ModifiersSpecification extends ErgoCorePropertyTest {
     ModifiersSpec.singleModifierFits(maxFitting + 1) shouldBe false
     val tooBig = ModifiersData(ProofsTypeId.value, Map(id -> Array.fill(maxFitting + 1)(2: Byte)))
     ModifiersSpec.parseBytes(ModifiersSpec.toBytes(tooBig)).modifiers shouldBe empty // written with count 0
+  }
+
+  property("Modifiers parser accepts InvSpec.maxInvObjects entries and rejects counts above it") {
+    def payloadWithCounts(declaredCount: Int, actualEntries: Int): Array[Byte] = {
+      val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+      w.put(ErgoTransaction.modifierTypeId)
+      w.putUInt(declaredCount.toLong)
+      (0 until actualEntries).foreach { i =>
+        val idBytes = ByteBuffer.allocate(32).putInt(i).array()
+        w.putBytes(idBytes)
+        w.putUInt(0L)
+      }
+      w.result().toBytes
+    }
+
+    val max = InvSpec.maxInvObjects
+    val atLimit = ModifiersSpec.parseBytesTry(payloadWithCounts(max, max))
+    atLimit.isSuccess shouldBe true
+    atLimit.get.modifiers.size shouldBe max
+
+    val aboveLimit = ModifiersSpec.parseBytesTry(payloadWithCounts(max + 1, max + 1))
+    aboveLimit.isFailure shouldBe true
+    aboveLimit.failed.get.getMessage should include(s"limit is $max")
+
+    val hugeDeclared = ModifiersSpec.parseBytesTry(payloadWithCounts(Int.MaxValue, 0))
+    hugeDeclared.isFailure shouldBe true
+    hugeDeclared.failed.get.getMessage should include(s"limit is $max")
   }
 
 }

@@ -58,6 +58,7 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
   override def parse(r: Reader): ModifiersData = {
     val typeId = NetworkObjectTypeId.fromByte(r.getByte()) // 1 byte
     val count = r.getUInt().toIntExact // 8 bytes
+    require(count <= InvSpec.maxInvObjects, s"$count elements in a message while limit is ${InvSpec.maxInvObjects}")
     // A node serializes a modifier that doesn't fit its size limit as a message with 0 modifiers.
     // Parse it as empty: the requester treats it as non-delivery rather than as a malformed message,
     // which would get an honest peer permanently banned.

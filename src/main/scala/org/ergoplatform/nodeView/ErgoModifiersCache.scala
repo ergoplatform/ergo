@@ -40,10 +40,14 @@ class ErgoModifiersCache(override val maxSize: Int) extends ModifiersCache with 
         .flatMap(id => cache.get(id).map(v => id -> v))
         .find(p => tryToApply(p._1, p._2)).map(_._1)
     } orElse {
-      // do exhaustive search between modifiers, that are possibly may be applied (exclude headers far from best header)
+      // do exhaustive search between modifiers, that are possibly may be applied (exclude headers far from best header
+      // whose parent is not known: a competing chain can be longer than the best one before it is heavier, and its
+      // headers above the best height + 1 must still be applied to find that out). A header whose parent is still in
+      // the cache waits for the parent to be applied first, so that case is skipped without a database read.
       cache.find { case (k, v) =>
         v match {
-          case h: Header if h.height > headersHeight + 1 => false
+          case h: Header if h.height > headersHeight + 1 &&
+            (cache.contains(h.parentId) || !history.contains(h.parentId)) => false
           case _ => tryToApply(k, v)
         }
       }.map(_._1)

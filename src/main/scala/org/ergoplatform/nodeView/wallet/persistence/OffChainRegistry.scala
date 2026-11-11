@@ -25,6 +25,11 @@ case class OffChainRegistry(height: Int,
   import org.ergoplatform.nodeView.wallet.IdUtils._
 
   /**
+    * Set of on-chain unspent box identifiers for O(1) membership checks in walletFilter.
+    */
+  lazy val onChainBoxIds: Set[String] = onChainBalances.iterator.map(_.id: String).toSet
+
+  /**
     * Off-chain index considering on-chain balances.
     */
   lazy val digest: WalletDigest = {
@@ -44,8 +49,9 @@ case class OffChainRegistry(height: Int,
   def updateOnTransaction(newBoxes: Seq[TrackedBox],
                           spentIds: Seq[EncodedBoxId],
                           scans: Seq[Scan]): OffChainRegistry = {
+    val spentIdsSet: Set[String] = spentIds.iterator.map(id => id: String).toSet
     val unspentCertain = offChainBoxes.flatMap { x: TrackedBox =>
-      val spent = spentIds.contains(x.boxId)
+      val spent = spentIdsSet.contains(x.boxId)
       if (spent) {
         if (x.scans.size > 1 || (x.scans.size == 1 && x.scans.head > Constants.PaymentsScanId)) {
           val leave = scans.exists(s => x.scans.contains(s.scanId) && !s.removeOffchain)
@@ -61,7 +67,7 @@ case class OffChainRegistry(height: Int,
         Some(x)
       }
     } ++ newBoxes
-    val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))
+    val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIdsSet.contains(x.id))
     this.copy(
       offChainBoxes = unspentCertain.distinct,
       onChainBalances = onChainBalancesUpdated

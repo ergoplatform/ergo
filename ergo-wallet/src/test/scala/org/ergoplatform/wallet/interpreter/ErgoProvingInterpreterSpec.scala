@@ -144,4 +144,35 @@ class ErgoProvingInterpreterSpec
     thb.publicHints(0).hints.size shouldBe 1
   }
 
+  it should "sign inputs quickly when wallet holds 27,000 cached HD keys (#1885)" in {
+    val baseSk = obtainSecretKey()
+    val basePk = baseSk.publicKey
+    val spendingSk = obtainSecretKey()
+    val spendingPk = spendingSk.publicKey
+
+    val dummyKeyCount = 27000
+    val secretKeys = IndexedSeq.fill(dummyKeyCount)(baseSk) :+ spendingSk
+    val cachedPubKeys = IndexedSeq.fill(dummyKeyCount)(basePk) :+ spendingPk
+
+    val prover = ErgoProvingInterpreter(secretKeys, parameters, Some(cachedPubKeys))
+    prover.secretsByPublicImage.contains(spendingPk.key) shouldBe true
+
+    val value = 100000000L
+    val creationHeight = 10000
+    val boxCandidate = new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(spendingPk.key), creationHeight)
+
+    val numOfInputs = 50
+    val fakeTxId = ModifierId @@ Base16.encode(Array.fill(32)(7: Byte))
+    val inputBoxes = (1 to numOfInputs).map(i => boxCandidate.toBox(fakeTxId, i.toShort))
+    val unsignedInputs = inputBoxes.map(ib => new UnsignedInput(ib.id, ContextExtension.empty))
+
+    val utx = new UnsignedErgoLikeTransaction(unsignedInputs, IndexedSeq.empty, IndexedSeq(boxCandidate))
+    val t0 = System.currentTimeMillis()
+    val signRes = prover.sign(utx, inputBoxes, IndexedSeq(), stateContext, TransactionHintsBag.empty)
+    val elapsedMs = System.currentTimeMillis() - t0
+
+    signRes.isSuccess shouldBe true
+    elapsedMs should be < 10000L
+  }
+
 }

@@ -534,8 +534,14 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
                           externalInputsOpt: Option[Seq[ErgoBox]],
                           externalDataInputsOpt: Option[Seq[ErgoBox]]): Try[TransactionHintsBag] = {
     val walletSecrets = state.walletVars.proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
-    val secrets = walletSecrets ++ externalSecretsOpt.getOrElse(Seq.empty).map(_.key)
-    val prover: ErgoProvingInterpreter = ErgoProvingInterpreter(secrets.toIndexedSeq, state.parameters)
+    val cachedHdPubKeysOpt = state.walletVars.proverOpt.map(_.hdPubKeys)
+    val externalKeys = externalSecretsOpt.getOrElse(Seq.empty).map(_.key)
+    val prover: ErgoProvingInterpreter = state.walletVars.proverOpt match {
+      case Some(existingProver) if externalKeys.isEmpty =>
+        existingProver
+      case _ =>
+        ErgoProvingInterpreter((walletSecrets ++ externalKeys).toIndexedSeq, state.parameters, cachedHdPubKeysOpt)
+    }
 
     val inputBoxes = externalInputsOpt.map(_.toIndexedSeq).getOrElse {
       unsignedTx.inputs.flatMap { unsignedInput =>
@@ -708,8 +714,14 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     })
 
     val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
+    val cachedHdPubKeysOpt = proverOpt.map(_.hdPubKeys)
     val secretsWrapped = secrets.map(_.key).toIndexedSeq
-    val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
+    val secretsProver = proverOpt match {
+      case Some(existingProver) if secretsWrapped.isEmpty =>
+        existingProver.withNewParameters(parameters)
+      case _ =>
+        ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters, cachedHdPubKeysOpt)
+    }
     secretsProver
       .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext, hints)
       .map(ErgoTransaction.apply)

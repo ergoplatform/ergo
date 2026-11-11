@@ -38,4 +38,5 @@ object ApiError {
   object ApiKeyNotValid extends ApiError(StatusCodes.Forbidden, "invalid.api-key")
   object NotExists extends ApiError(StatusCodes.NotFound, "not-found")
   object Forbidden extends ApiError(StatusCodes.Forbidden, "forbidden")
+  object UnsupportedMediaType extends ApiError(StatusCodes.UnsupportedMediaType, "unsupported.media.type")
 }

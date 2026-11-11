@@ -27,6 +27,16 @@ object ApiRejectionHandler {
         ApiError.NotExists(s"Request is missing required query parameter '$paramName'")
     }
     .handle {
+      case MalformedQueryParamRejection(paramName, errorMsg, _) =>
+        ApiError.BadRequest(s"The query parameter '$paramName' was malformed:\n$errorMsg")
+    }
+    .handleAll[UnsupportedRequestContentTypeRejection] { rejections =>
+      val unsupported = rejections.find(_.contentType.isDefined).flatMap(_.contentType).fold("")(" [" + _ + "]")
+      val supported = rejections.flatMap(_.supported).distinct.mkString(" or ")
+      val expected = if (supported.isEmpty) "" else s" Expected:\n$supported"
+      ApiError.UnsupportedMediaType(s"The request's Content-Type$unsupported is not supported.$expected")
+    }
+    .handle {
       case RequestEntityExpectedRejection =>
         ApiError.BadRequest("Request entity expected but not supplied")
     }

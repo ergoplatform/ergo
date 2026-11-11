@@ -97,6 +97,14 @@ trait ErgoWalletReader extends NodeViewComponent {
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
     (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]
 
+  /**
+    * Wallet-related transactions which were not on the blockchain yet when the node was stopped, so
+    * that they can be put back into the memory pool. Ordered so that a transaction spending an
+    * output of another one comes after it.
+    */
+  def unconfirmedTransactionsToRestore: Future[Seq[ErgoTransaction]] =
+    (walletActor ? ReadUnconfirmedTransactions).mapTo[Seq[ErgoTransaction]]
+
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =

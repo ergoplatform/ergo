@@ -54,7 +54,7 @@ class CleanupWorker(nodeSettings: NodeConfigurationSettings) extends Actor with 
     val allPoolTxs = mempool.getAllPrioritized
     val res = CleanupWorker.validatePool(
       validator = validator,
-      mempool = mempool,
+      poolTxs = allPoolTxs,
       maxTransactionCost = nodeSettings.maxTransactionCost,
       timeLimit = TimeLimit,
       now = System.currentTimeMillis()
@@ -89,15 +89,15 @@ object CleanupWorker extends ScorexLogging {
   /**
     * Selects mempool transactions which were not re-checked recently enough.
     *
-    * @param mempool   - mempool reader instance
+    * @param poolTxs   - pool transactions, sorted by priority
     * @param timeLimit - a transaction can be re-checked only after this delay, in milliseconds
     * @param now       - current time, in milliseconds
     * @return transactions to be re-validated, sorted by priority (a parent comes before its children)
     */
-  def transactionsToValidate(mempool: ErgoMemPoolReader,
+  def transactionsToValidate(poolTxs: Seq[UnconfirmedTransaction],
                              timeLimit: Long,
                              now: Long): Seq[UnconfirmedTransaction] =
-    mempool.getAllPrioritized.filter { utx =>
+    poolTxs.filter { utx =>
       (now - utx.lastCheckedTime) > timeLimit
     }
 
@@ -108,7 +108,7 @@ object CleanupWorker extends ScorexLogging {
     * node view, so it can be called directly from tests.
     *
     * @param validator          - a state implementation which provides transaction validation
-    * @param mempool            - mempool reader instance
+    * @param poolTxs            - pool transactions, sorted by priority (a parent comes before its children)
     * @param maxTransactionCost - maximum cost of a single transaction
     * @param timeLimit          - a transaction can be re-checked only after this delay, in milliseconds
     * @param now                - current time, in milliseconds
@@ -116,19 +116,18 @@ object CleanupWorker extends ScorexLogging {
     * @return - updated valid transactions and invalidated transaction ids
     */
   def validatePool(validator: UtxoStateReader,
-                   mempool: ErgoMemPoolReader,
+                   poolTxs: Seq[UnconfirmedTransaction],
                    maxTransactionCost: Int,
                    timeLimit: Long,
                    now: Long,
                    costLimit: Long = CostLimit): CleanupResult = {
 
     // Check transactions sorted by priority. Parent transaction comes before its children.
-    val allPoolTxs = mempool.getAllPrioritized
-    val txsToValidate = transactionsToValidate(mempool, timeLimit, now).toList
+    val txsToValidate = transactionsToValidate(poolTxs, timeLimit, now).toList
 
     // Take into account other transactions from the pool.
     // This provides possibility to validate transactions which are spending off-chain outputs.
-    val state = validator.withUnconfirmedTransactions(allPoolTxs)
+    val state = validator.withUnconfirmedTransactions(poolTxs)
 
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec

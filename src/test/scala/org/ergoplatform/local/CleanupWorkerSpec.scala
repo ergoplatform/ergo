@@ -3,13 +3,13 @@ package org.ergoplatform.local
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
+import org.ergoplatform.utils.{ErgoTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 
 /**
   * Tests for the memory pool re-validation logic extracted from the `CleanupWorker` actor.
   */
-class CleanupWorkerSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers with MempoolTestHelpers {
+class CleanupWorkerSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHelpers {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
@@ -47,9 +47,9 @@ class CleanupWorkerSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHe
     val (us, validTxs) = stateWithValidTxs
     val fresh = validTxs.map(tx => unconfirmed(tx, age = TimeLimit / 2))
 
-    CleanupWorker.transactionsToValidate(new FakeMempool(fresh), TimeLimit, Now) shouldBe empty
+    CleanupWorker.transactionsToValidate(fresh, TimeLimit, Now) shouldBe empty
 
-    val result = CleanupWorker.validatePool(us, new FakeMempool(fresh), maxTransactionCost, TimeLimit, Now)
+    val result = CleanupWorker.validatePool(us, fresh, maxTransactionCost, TimeLimit, Now)
     result.validated shouldBe empty
     result.invalidated shouldBe empty
   }
@@ -59,11 +59,11 @@ class CleanupWorkerSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHe
     val stale = validTxs.map(tx => unconfirmed(tx, age = TimeLimit * 2))
     val fresh = validTxs.map(tx => unconfirmed(tx, age = 0))
 
-    CleanupWorker.transactionsToValidate(new FakeMempool(stale), TimeLimit, Now).map(_.id) shouldBe stale.map(_.id)
-    CleanupWorker.transactionsToValidate(new FakeMempool(fresh), TimeLimit, Now) shouldBe empty
+    CleanupWorker.transactionsToValidate(stale, TimeLimit, Now).map(_.id) shouldBe stale.map(_.id)
+    CleanupWorker.transactionsToValidate(fresh, TimeLimit, Now) shouldBe empty
     // the boundary is exclusive: exactly `TimeLimit` old is not stale yet
     CleanupWorker.transactionsToValidate(
-      new FakeMempool(validTxs.map(tx => unconfirmed(tx, age = TimeLimit))), TimeLimit, Now) shouldBe empty
+      validTxs.map(tx => unconfirmed(tx, age = TimeLimit)), TimeLimit, Now) shouldBe empty
   }
 
   it should "keep still-valid transactions and update their cost" in {
@@ -71,7 +71,7 @@ class CleanupWorkerSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHe
     validTxs.nonEmpty shouldBe true
     val pool = validTxs.map(tx => unconfirmed(tx, age = TimeLimit * 2))
 
-    val result = CleanupWorker.validatePool(us, new FakeMempool(pool), maxTransactionCost, TimeLimit, Now, NoCostLimit)
+    val result = CleanupWorker.validatePool(us, pool, maxTransactionCost, TimeLimit, Now, NoCostLimit)
 
     result.invalidated shouldBe empty
     result.validated.map(_.id) should contain theSameElementsAs pool.map(_.id)
@@ -85,7 +85,7 @@ class CleanupWorkerSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHe
     val broken = invalidTxs(4)
     val pool = broken.map(tx => unconfirmed(tx, age = TimeLimit * 2))
 
-    val result = CleanupWorker.validatePool(us, new FakeMempool(pool), maxTransactionCost, TimeLimit, Now, NoCostLimit)
+    val result = CleanupWorker.validatePool(us, pool, maxTransactionCost, TimeLimit, Now, NoCostLimit)
 
     result.validated shouldBe empty
     result.invalidated should contain theSameElementsAs pool.map(_.id)
@@ -96,7 +96,7 @@ class CleanupWorkerSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHe
     val broken = invalidTxs(3)
     val pool = (validTxs ++ broken).map(tx => unconfirmed(tx, age = TimeLimit * 2))
 
-    val result = CleanupWorker.validatePool(us, new FakeMempool(pool), maxTransactionCost, TimeLimit, Now, NoCostLimit)
+    val result = CleanupWorker.validatePool(us, pool, maxTransactionCost, TimeLimit, Now, NoCostLimit)
 
     result.validated.map(_.id) should contain theSameElementsAs validTxs.map(_.id)
     result.invalidated should contain theSameElementsAs broken.map(_.id)
@@ -109,10 +109,10 @@ class CleanupWorkerSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestHe
     val pool = validTxs.map(tx => unconfirmed(tx, age = TimeLimit * 2))
 
     // costAcc starts at 0, so the first transaction is always checked and then the limit stops the loop
-    val limited = CleanupWorker.validatePool(us, new FakeMempool(pool), maxTransactionCost, TimeLimit, Now, costLimit = 1L)
+    val limited = CleanupWorker.validatePool(us, pool, maxTransactionCost, TimeLimit, Now, costLimit = 1L)
     limited.validated.size + limited.invalidated.size shouldBe 1
 
-    val unlimited = CleanupWorker.validatePool(us, new FakeMempool(pool), maxTransactionCost, TimeLimit, Now, NoCostLimit)
+    val unlimited = CleanupWorker.validatePool(us, pool, maxTransactionCost, TimeLimit, Now, NoCostLimit)
     unlimited.validated.size + unlimited.invalidated.size shouldBe pool.size
   }
 

@@ -10,6 +10,7 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.UtxoSetScanner.InitializeUtxoSetScannerWithHistory
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
   IndexedHeightKey, NewestVersion, NewestVersionBytes, RentIndexEnabledBytes, RentIndexEnabledKey, RollbackToKey, SchemaVersionKey}
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
@@ -621,6 +622,12 @@ object ErgoHistory extends ScorexLogging {
     })(history.closeStorage())
 
     log.info("History database read")
+
+    // set history for utxo set scanner, if bootstrapping by snapshot
+    if (ergoSettings.nodeSettings.utxoSettings.utxoBootstrap) {
+      context.system.eventStream.publish(InitializeUtxoSetScannerWithHistory(history))
+    }
+
     history
   }
 

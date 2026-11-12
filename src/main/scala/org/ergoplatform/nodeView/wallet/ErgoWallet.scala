@@ -1,8 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem}
+import akka.pattern.ask
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
@@ -11,6 +12,9 @@ import org.ergoplatform.wallet.boxes.{ReemissionData, ReplaceCompactCollectBoxSe
 import org.ergoplatform.core.VersionTag
 import scorex.util.ScorexLogging
 
+import java.util.concurrent.TimeUnit
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
 
 class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, parameters: Parameters)
@@ -35,6 +39,17 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
 
   override val walletActor: ActorRef =
     ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)
+
+  private val duration: Duration = Duration.create(10, TimeUnit.SECONDS)
+
+  /**
+    * Synchronously forwards a batch of UTXO snapshot subtrees to the wallet actor for scanning.
+    *
+    * @param msg - batch of subtrees and progress metadata
+    * @return number of the last subtree the wallet scanned (less than `msg.current` if a subtree failed)
+    */
+  def scanUtxoSnapshot(msg: ScanBoxesFromUtxoSnapshot): Int =
+    Await.result((walletActor ? msg).mapTo[Int], duration)
 
   def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)

@@ -2,7 +2,7 @@ package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
-import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{noStoreSerializer, topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
@@ -106,7 +106,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
         val nodeBytes = dbReader.get(label)
         builder ++= nodeBytes
-        val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
+        val node = noStoreSerializer.parseBytes(nodeBytes)
         node match {
           case in: ProxyInternalNode[DigestType] =>
             subtreeLoop(Digest32 @@@ in.leftLabel, builder)
@@ -125,7 +125,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       def manifestLoop(nodeDbKey: Array[Byte], level: Int, manifestBuilder: mutable.ArrayBuilder[Byte]): Unit = {
         val nodeBytes = dbReader.get(nodeDbKey)
         manifestBuilder ++= nodeBytes
-        val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
+        val node = noStoreSerializer.parseBytes(nodeBytes)
         node match {
           case in: ProxyInternalNode[DigestType] if level == manifestDepth =>
             dumpSubtree(Digest32 @@@ in.leftLabel)
@@ -155,6 +155,69 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       rootNodeLabel
     }
   }
+
+  /**
+    * Split the AVL+ tree into up to 2^depth subtrees and process them sequentially using a read-only LevelDB snapshot.
+    *
+    * @param fromIndex     - 0-based subtree index to start processing from (subtrees before `fromIndex` are skipped)
+    * @param depth         - tree depth at which to split the AVL+ tree into subtrees
+    * @param handleSubtree - callback invoked on each reconstructed [[BatchAVLProverSubtree]] at or after `fromIndex`
+    */
+  def iterateAVLTree(fromIndex: Int, depth: Int)(handleSubtree: BatchAVLProverSubtree[DigestType] => Unit): Unit = {
+    iterateAVLTreeUntil(fromIndex, depth) { s =>
+      handleSubtree(s)
+      true
+    }
+    ()
+  }
+
+  /**
+    * Split the AVL+ tree into up to 2^depth subtrees and process them sequentially using a read-only LevelDB snapshot,
+    * stopping traversal immediately when `handleSubtree` returns `false`.
+    *
+    * @param fromIndex     - 0-based subtree index to start processing from (subtrees before `fromIndex` are skipped)
+    * @param depth         - tree depth at which to split the AVL+ tree into subtrees
+    * @param handleSubtree - callback invoked on each reconstructed [[BatchAVLProverSubtree]] at or after `fromIndex`;
+    *                        return `true` to continue or `false` to abort traversal early
+    * @return `true` if all subtrees from `fromIndex` were processed without early exit, `false` otherwise
+    */
+  def iterateAVLTreeUntil(fromIndex: Int, depth: Int)(handleSubtree: BatchAVLProverSubtree[DigestType] => Boolean): Boolean =
+    store.processSnapshot { dbReader =>
+
+      var current: Int = 0
+      var keepGoing: Boolean = true
+
+      def subtree(sid: Array[Byte]): BatchAVLProverSubtree[DigestType] = {
+        def loop(label: Array[Byte]): ProverNodes[DigestType] =
+          (noStoreSerializer.parseBytes(dbReader.get(label)): @unchecked) match {
+            case leaf: ProverLeaf[DigestType] => leaf
+            case i: ProxyInternalNode[DigestType] =>
+              i.getNew(loop(i.leftLabel), loop(i.rightLabel))
+          }
+        new BatchAVLProverSubtree[DigestType](loop(sid))
+      }
+
+      def proxyLoop(label: Array[Byte], level: Int): Unit =
+        if (keepGoing) {
+          noStoreSerializer.parseBytes(dbReader.get(label)) match {
+            case in: ProxyInternalNode[DigestType] if level == depth =>
+              if (current >= fromIndex) keepGoing = handleSubtree(subtree(in.leftLabel))
+              current += 1
+              if (keepGoing && current >= fromIndex) keepGoing = handleSubtree(subtree(in.rightLabel))
+              current += 1
+            case in: ProxyInternalNode[DigestType] =>
+              proxyLoop(in.leftLabel, level + 1)
+              if (keepGoing) proxyLoop(in.rightLabel, level + 1)
+            case leaf: ProverLeaf[DigestType] =>
+              if (current >= fromIndex) keepGoing = handleSubtree(new BatchAVLProverSubtree[DigestType](leaf))
+              current += 1
+            case _ =>
+          }
+        }
+
+      proxyLoop(dbReader.get(topNodeHashKey), 1)
+      keepGoing
+    }
 }
 
 

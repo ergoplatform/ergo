@@ -33,8 +33,11 @@ import org.scalatest.matchers.should.Matchers
 import scala.util.{Random, Try}
 import scala.concurrent.duration._
 import akka.http.scaladsl.server.MissingQueryParamRejection
+import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.settings.Constants.FalseTree
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators
+import sigma.ast.ByteArrayConstant
+import sigma.interpreter.ContextExtension
 
 class WalletApiRouteSpec extends AnyFlatSpec
   with Matchers
@@ -106,6 +109,34 @@ class WalletApiRouteSpec extends AnyFlatSpec
     Post(prefix + "/transaction/generate", requestsHolder.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[ErgoTransaction]) shouldBe 'success
+    }
+  }
+
+  it should "generate signed and unsigned transactions with context extensions" in {
+    val ext = ContextExtension(Map((1: Byte) -> ByteArrayConstant(Array[Byte](10, 20, 30))))
+    val holderWithExt = requestsHolder.copy(contextExtensions = Seq(ext))(settings.addressEncoder)
+
+    // Roundtrip JSON decoding of RequestsHolder with context.extension
+    val decodedHolder = holderWithExt.asJson.as[RequestsHolder](new RequestsHolderDecoder(ergoSettings))
+    decodedHolder.isRight shouldBe true
+    decodedHolder.right.get.contextExtensions shouldBe Seq(ext)
+
+    // Also decode when context field is omitted
+    val jsonWithoutContext = holderWithExt.asJson.mapObject(_.remove("context"))
+    val decodedWithoutContext = jsonWithoutContext.as[RequestsHolder](new RequestsHolderDecoder(ergoSettings))
+    decodedWithoutContext.isRight shouldBe true
+    decodedWithoutContext.right.get.contextExtensions shouldBe empty
+
+    Post(prefix + "/transaction/generate", holderWithExt.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val tx = responseAs[ErgoTransaction]
+      tx.inputs.head.spendingProof.extension shouldBe ext
+    }
+
+    Post(prefix + "/transaction/generateUnsigned", holderWithExt.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val utx = responseAs[UnsignedErgoTransaction]
+      utx.inputs.head.extension shouldBe ext
     }
   }
 

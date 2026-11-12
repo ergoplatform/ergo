@@ -25,6 +25,7 @@ import scorex.util.ModifierId
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigma.Extensions.CollBytesOps
 import sigma.data.SigmaBoolean
+import sigma.interpreter.ContextExtension
 
 import java.io.FileNotFoundException
 import scala.collection.compat.immutable.ArraySeq
@@ -251,7 +252,8 @@ trait ErgoWalletService {
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]]
+                          sign: Boolean,
+                          contextExtensions: Seq[ContextExtension] = Seq.empty): Try[ErgoLikeTransactionTemplate[_]]
 
   /**
     * Generate commitments to be used then to sign a transaction.
@@ -508,8 +510,9 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
                           requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
-                          sign: Boolean): Try[ErgoLikeTransactionTemplate[_]] = {
-    val tx = generateUnsignedTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw)
+                          sign: Boolean,
+                          contextExtensions: Seq[ContextExtension] = Seq.empty): Try[ErgoLikeTransactionTemplate[_]] = {
+    val tx = generateUnsignedTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw, contextExtensions)
     if (sign) {
       tx.flatMap { case (unsignedTx, inputs, dataInputs) =>
         state.walletVars.proverOpt match {

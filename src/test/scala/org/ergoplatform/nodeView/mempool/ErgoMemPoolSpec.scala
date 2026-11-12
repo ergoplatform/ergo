@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBoxCandidate, Input}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -946,6 +946,51 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     // After replacement, TX4 (lower fee) should be rejected as double-spending loser
     val (_, outcome4) = poolAfter.process(tx4, wus)
     outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
+  }
+
+  it should "take into account dataInputs during mempool updateFamily without duplicate parent weight updates" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+    val txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
+    txs.size should be >= 2
+
+    val parentTx = txs.head
+    val unrelatedInputTx = txs(1)
+    val parentBox = parentTx.transaction.outputs.head
+
+    val pool0 = ErgoMemPool.empty(settings).pool.put(parentTx, 100)
+    val initialParentWeight = pool0.transactionsRegistry(parentTx.id).weight
+
+    // Child transaction spends an unrelated box but references parentTx's output via dataInputs
+    val childViaDataInput = UnconfirmedTransaction(
+      unrelatedInputTx.transaction.copy(
+        dataInputs = IndexedSeq(DataInput(parentBox.id))
+      ),
+      None
+    )
+    val pool1 = pool0.put(childViaDataInput, 100)
+    val childWeight = pool1.transactionsRegistry(childViaDataInput.id).weight
+    val updatedParentWeight = pool1.transactionsRegistry(parentTx.id).weight
+
+    updatedParentWeight shouldBe (initialParentWeight + childWeight)
+
+    // Removing the child transaction restores parent weight
+    val pool2 = pool1.remove(childViaDataInput)
+    pool2.transactionsRegistry(parentTx.id).weight shouldBe initialParentWeight
+
+    // Referencing the same parent via both inputs and dataInputs only updates parent weight once
+    val childBothRefs = UnconfirmedTransaction(
+      parentTx.transaction.copy(
+        inputs = IndexedSeq(new Input(parentBox.id, emptyProverResult)),
+        dataInputs = IndexedSeq(DataInput(parentBox.id)),
+        outputCandidates = IndexedSeq(parentBox)
+      ),
+      None
+    )
+    val poolWithBoth = pool2.put(childBothRefs, 100)
+    val childBothWeight = poolWithBoth.transactionsRegistry(childBothRefs.id).weight
+    poolWithBoth.transactionsRegistry(parentTx.id).weight shouldBe (initialParentWeight + childBothWeight)
   }
 
 }

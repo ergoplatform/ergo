@@ -35,7 +35,8 @@ import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
-import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, IntConstant, SType}
+import sigma.interpreter.ContextExtension
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers.testBox
@@ -155,6 +156,27 @@ class ErgoWalletServiceSpec
         val txWithChangeBoxesButNoChangeAddress =
           prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option.empty)
         txWithChangeBoxesButNoChangeAddress.isFailure shouldBe true
+
+        val customExtension = ContextExtension(Map((1: Byte) -> ByteArrayConstant(Array[Byte](1, 2, 3))))
+        val txWithExt = prepareUnsignedTransaction(
+          Seq(outputCandidate),
+          startHeight,
+          selectionResult,
+          ergoBoxes,
+          Option(proveDlog),
+          Seq(customExtension)
+        ).get
+        txWithExt.inputs.map(_.extension) shouldBe IndexedSeq(customExtension)
+
+        val tooManyExtensions = prepareUnsignedTransaction(
+          Seq(outputCandidate),
+          startHeight,
+          selectionResult,
+          ergoBoxes,
+          Option(proveDlog),
+          Seq(customExtension, customExtension)
+        )
+        tooManyExtensions.isFailure shouldBe true
     }
   }
 
@@ -664,4 +686,86 @@ class ErgoWalletServiceSpec
     }
   }
 
+  // Context-extension pairing witness: each user-provided input must carry the extension
+  // the caller paired with that box in inputsRaw, whatever order the box selector returns.
+  private def pairingCase(label: String, callerOrder: Seq[Char], expectedSelected: String,
+                          withExtension: Int = Int.MaxValue): Unit = {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+        val boxes: Map[Char, ErgoBox] = Map(
+          'A' -> testBox(10000000000L, TrueTree, 0),
+          'B' -> testBox(5000000000L, TrueTree, 0),
+          'C' -> testBox(1000000000L, TrueTree, 0),
+          'D' -> testBox(3000000000L, TrueTree, 0)
+        )
+        def ext(i: Int): ContextExtension =
+          ContextExtension(Map[Byte, EvaluatedValue[SType]](1.toByte -> IntConstant(i)))
+        val exts: Map[Char, ContextExtension] = Map('A' -> ext(1), 'B' -> ext(2), 'C' -> ext(3), 'D' -> ext(4))
+        val nameById: Map[String, Char] = boxes.map { case (n, b) => Base16.encode(b.id) -> n }
+
+        val inputsRaw = callerOrder.map(n => Base16.encode(ErgoBoxSerializer.toBytes(boxes(n))))
+        val paired = callerOrder.take(withExtension)
+        val extensions = paired.map(exts)
+        def expected(n: Char): ContextExtension = if (paired.contains(n)) exts(n) else ContextExtension.empty
+        val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map.empty)
+        val boxSelector = new ReplaceCompactCollectBoxSelector(
+          settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
+
+        val (utx, _, _) =
+          generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw, Seq.empty, extensions).get
+
+        val selected = utx.inputs.map(i => nameById(Base16.encode(i.boxId)))
+        selected.mkString shouldBe expectedSelected
+        selected.zip(utx.inputs).foreach { case (n, i) =>
+          withClue(s"case $label, input $n: ") { i.extension shouldBe expected(n) }
+        }
+      }
+    }
+  }
+
+  property("pairing witness N: caller order already equals selector order") {
+    pairingCase("N", "ACB", "ACB")
+  }
+
+  property("pairing witness R: selector reorders the caller's inputs") {
+    pairingCase("R", "ABC", "ACB")
+  }
+
+  property("pairing witness S: selector keeps a subset of the caller's inputs") {
+    pairingCase("S", "ABCD", "ACD")
+  }
+
+  property("pairing witness P: a shorter list, padded with empty extensions") {
+    pairingCase("P", "ABCD", "ACD", withExtension = 3)
+  }
+
+  property("generateUnsignedTransaction rejects more contextExtensions than inputsRaw") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+        val boxA = testBox(10000000000L, TrueTree, 0)
+        val rawA = Base16.encode(ErgoBoxSerializer.toBytes(boxA))
+        val ext1 = ContextExtension(Map[Byte, EvaluatedValue[SType]](1.toByte -> IntConstant(1)))
+        val ext2 = ContextExtension(Map[Byte, EvaluatedValue[SType]](1.toByte -> IntConstant(2)))
+        val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map.empty)
+        val boxSelector = new ReplaceCompactCollectBoxSelector(
+          settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
+
+        // More extensions than inputsRaw (2 > 1)
+        val tooMany = generateUnsignedTransaction(
+          wState, boxSelector, Seq(paymentRequest), Seq(rawA), Seq.empty, Seq(ext1, ext2)
+        )
+        tooMany.isFailure shouldBe true
+        tooMany.failed.get.getMessage should include("More context extensions (2) than inputsRaw (1)")
+
+        // Extensions provided when inputsRaw is empty (1 > 0)
+        val noInputsRaw = generateUnsignedTransaction(
+          wState, boxSelector, Seq(paymentRequest), Seq.empty, Seq.empty, Seq(ext1)
+        )
+        noInputsRaw.isFailure shouldBe true
+        noInputsRaw.failed.get.getMessage should include("More context extensions (1) than inputsRaw (0)")
+      }
+    }
+  }
 }

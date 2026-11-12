@@ -95,6 +95,22 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     * @param unconfirmedTx - transaction to add
     * @return - modified pool
     */
+  private def outputsWithout(tx: ErgoTransaction): TreeMap[BoxId, WeightedTxId] =
+    tx.outputs.foldLeft(outputs) { case (acc, box) =>
+      acc.get(box.id) match {
+        case Some(wtx) if wtx.id == tx.id => acc - box.id
+        case _                            => acc
+      }
+    }
+
+  private def inputsWithout(tx: ErgoTransaction): TreeMap[BoxId, WeightedTxId] =
+    tx.inputs.foldLeft(inputs) { case (acc, inp) =>
+      acc.get(inp.boxId) match {
+        case Some(wtx) if wtx.id == tx.id => acc - inp.boxId
+        case _                            => acc
+      }
+    }
+
   def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
 
@@ -142,20 +158,27 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
           withoutTransaction(tx.id),
           transactionsRegistry - tx.id,
           invalidatedTxIds,
-          outputs -- tx.outputs.map(_.id),
-          inputs -- tx.inputs.map(_.boxId)
+          outputsWithout(tx),
+          inputsWithout(tx)
         ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), depth = 0, subtract = true)
       case Some(_) =>
-        if (orderedTransactions.valuesIterator.exists(_.id == tx.id)) {
-          new OrderedTxPool(
-            withoutTransaction(tx.id),
-            transactionsRegistry - tx.id,
-            invalidatedTxIds,
-            outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
-          )
-        } else {
-          this
+        currentTransaction(tx.id) match {
+          case Some((actualWtx, _)) =>
+            new OrderedTxPool(
+              withoutTransaction(tx.id),
+              transactionsRegistry - tx.id,
+              invalidatedTxIds,
+              outputsWithout(tx),
+              inputsWithout(tx)
+            ).updateFamily(tx, actualWtx.weight, System.currentTimeMillis(), depth = 0, subtract = true)
+          case None =>
+            new OrderedTxPool(
+              orderedTransactions,
+              transactionsRegistry - tx.id,
+              invalidatedTxIds,
+              outputsWithout(tx),
+              inputsWithout(tx)
+            )
         }
       case None =>
         if (hasUnregisteredTransaction(tx.id)) {
@@ -163,8 +186,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
             withoutTransaction(tx.id),
             transactionsRegistry,
             invalidatedTxIds,
-            outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
+            outputsWithout(tx),
+            inputsWithout(tx)
           )
         } else {
           this
@@ -185,20 +208,27 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
           withoutTransaction(tx.id),
           transactionsRegistry - tx.id,
           invalidatedTxIds.put(tx.id),
-          outputs -- tx.outputs.map(_.id),
-          inputs -- tx.inputs.map(_.boxId)
+          outputsWithout(tx),
+          inputsWithout(tx)
         ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), depth = 0, subtract = true)
       case Some(_) =>
-        if (orderedTransactions.valuesIterator.exists(utx => utx.id == tx.id)) {
-          new OrderedTxPool(
-            withoutTransaction(tx.id),
-            transactionsRegistry - tx.id,
-            invalidatedTxIds.put(tx.id),
-            outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
-          )
-        } else {
-          new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
+        currentTransaction(tx.id) match {
+          case Some((actualWtx, _)) =>
+            new OrderedTxPool(
+              withoutTransaction(tx.id),
+              transactionsRegistry - tx.id,
+              invalidatedTxIds.put(tx.id),
+              outputsWithout(tx),
+              inputsWithout(tx)
+            ).updateFamily(tx, actualWtx.weight, System.currentTimeMillis(), depth = 0, subtract = true)
+          case None =>
+            new OrderedTxPool(
+              orderedTransactions,
+              transactionsRegistry - tx.id,
+              invalidatedTxIds.put(tx.id),
+              outputsWithout(tx),
+              inputsWithout(tx)
+            )
         }
       case None =>
         if (hasUnregisteredTransaction(tx.id)) {
@@ -206,8 +236,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
             withoutTransaction(tx.id),
             transactionsRegistry,
             invalidatedTxIds.put(tx.id),
-            outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
+            outputsWithout(tx),
+            inputsWithout(tx)
           )
         } else {
           new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
@@ -275,8 +305,12 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
               pool.withoutTransaction(parent.id).updated(newWtx, ut),
               pool.transactionsRegistry.updated(parent.id, newWtx),
               pool.invalidatedTxIds,
-              parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
-              parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
+              parent.outputs.foldLeft(pool.outputs) { (newOutputs, box) =>
+                if (newOutputs.get(box.id).forall(_.id == parent.id)) newOutputs.updated(box.id, newWtx) else newOutputs
+              },
+              parent.inputs.foldLeft(pool.inputs) { (newInputs, inp) =>
+                if (newInputs.get(inp.boxId).forall(_.id == parent.id)) newInputs.updated(inp.boxId, newWtx) else newInputs
+              }
             )
             newPool.updateFamily(parent, weight, startTime, depth + 1, subtract)
           case None =>

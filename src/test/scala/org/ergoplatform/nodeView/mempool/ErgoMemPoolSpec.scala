@@ -948,4 +948,105 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
   }
 
+
+  it should "keep OrderedTxPool indices consistent across shared inputs, drifted weights, and dangling registry entries (#1952)" in {
+    val tx1 = feeTx(1.toByte, 100000L)
+    val tx2 = feeTx(1.toByte, 200000L) // spends the same input box as tx1 with higher fee
+    val utx1 = UnconfirmedTransaction(tx1, None)
+    val utx2 = UnconfirmedTransaction(tx2, None)
+
+    val pool0 = ErgoMemPool.empty(settings)
+    val pool1 = pool0.put(utx1)
+    val pool2 = pool1.put(utx2)
+    pool2.pool.inputs.values.map(_.id).toSet shouldBe Set(tx2.id)
+
+    // 1. Removing or invalidating tx1 must preserve tx2's shared input mapping (inputsWithout)
+    //    and preserve reassigned output mappings (outputsWithout)
+    val sharedOutId = tx1.outputs.head.id
+    val wtx2 = pool2.pool.transactionsRegistry(tx2.id)
+    val poolWithReassignedOut = new OrderedTxPool(
+      pool2.pool.orderedTransactions,
+      pool2.pool.transactionsRegistry,
+      pool2.pool.invalidatedTxIds,
+      pool2.pool.outputs.updated(sharedOutId, wtx2),
+      pool2.pool.inputs
+    )(settings)
+
+    val afterRemove = poolWithReassignedOut.remove(tx1)
+    afterRemove.contains(tx1.id) shouldBe false
+    afterRemove.contains(tx2.id) shouldBe true
+    afterRemove.inputs.values.map(_.id).toSet shouldBe Set(tx2.id)
+    afterRemove.outputs.get(sharedOutId) shouldBe Some(wtx2)
+
+    val afterInvalidate = poolWithReassignedOut.invalidate(utx1)
+    afterInvalidate.contains(tx1.id) shouldBe false
+    afterInvalidate.isInvalidated(tx1.id) shouldBe true
+    afterInvalidate.inputs.values.map(_.id).toSet shouldBe Set(tx2.id)
+    afterInvalidate.outputs.get(sharedOutId) shouldBe Some(wtx2)
+
+    // 2. When a child of tx1 arrives, updateFamily updates tx1's weight in orderedTransactions/registry
+    //    without overwriting tx2's ownership of the shared input in `inputs`
+    val childInput = new Input(tx1.outputs.head.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
+    val childTx = new ErgoTransaction(IndexedSeq(childInput), IndexedSeq.empty, tx1.outputs)
+    val utxChild = UnconfirmedTransaction(childTx, None)
+    val poolWithChild = pool2.put(utxChild)
+    poolWithChild.pool.inputs(tx1.inputs.head.boxId).id shouldBe tx2.id
+
+    // 3. If transactionsRegistry has a drifted weight for utxChild, remove/invalidate still locates
+    //    the actual entry via currentTransaction and subtracts utxChild's weight from parent tx1
+    val parentBeforeChild = pool2.pool.transactionsRegistry(tx1.id).weight
+    val parentWithChild = poolWithChild.pool.transactionsRegistry(tx1.id).weight
+    parentWithChild should be > parentBeforeChild
+
+    val driftedChildWtx = poolWithChild.pool.transactionsRegistry(childTx.id).copy(weight = 1L)
+    val driftedPool = new OrderedTxPool(
+      poolWithChild.pool.orderedTransactions,
+      poolWithChild.pool.transactionsRegistry.updated(childTx.id, driftedChildWtx),
+      poolWithChild.pool.invalidatedTxIds,
+      poolWithChild.pool.outputs,
+      poolWithChild.pool.inputs
+    )(settings)
+
+    val afterDriftedRemove = driftedPool.remove(childTx)
+    afterDriftedRemove.contains(childTx.id) shouldBe false
+    afterDriftedRemove.transactionsRegistry(tx1.id).weight shouldBe parentBeforeChild
+
+    val afterDriftedInvalidate = driftedPool.invalidate(utxChild)
+    afterDriftedInvalidate.contains(childTx.id) shouldBe false
+    afterDriftedInvalidate.transactionsRegistry(tx1.id).weight shouldBe parentBeforeChild
+
+    // 4. Dangling ghost entry in transactionsRegistry (absent from orderedTransactions) is cleaned up
+    val ghostWtx = OrderedTxPool.weighted(utx1, 100)(settings.chainSettings.monetary)
+    val ghostPool = new OrderedTxPool(
+      afterRemove.orderedTransactions,
+      afterRemove.transactionsRegistry.updated(tx1.id, ghostWtx),
+      afterRemove.invalidatedTxIds,
+      afterRemove.outputs,
+      afterRemove.inputs
+    )(settings)
+    ghostPool.contains(tx1.id) shouldBe true
+    ghostPool.get(tx1.id) shouldBe None
+    ghostPool.remove(tx1).contains(tx1.id) shouldBe false
+    ghostPool.invalidate(utx1).contains(tx1.id) shouldBe false
+
+    // 5. ErgoMemPool.acceptIfNoDoubleSpend evicts a lower-fee double-spent transaction even if
+    //    `inputs` holds a stale WeightedTxId whose weight drifted from `orderedTransactions`
+    val staleInputWtx1 = pool1.pool.transactionsRegistry(tx1.id).copy(weight = 1L)
+    val poolWithStaleInputMap = new ErgoMemPool(
+      new OrderedTxPool(
+        pool1.pool.orderedTransactions,
+        pool1.pool.transactionsRegistry,
+        pool1.pool.invalidatedTxIds,
+        pool1.pool.outputs,
+        pool1.pool.inputs.updated(tx1.inputs.head.boxId, staleInputWtx1)
+      )(settings),
+      pool1.stats,
+      pool1.sortingOption
+    )(settings)
+    val (poolAfterReplace, outcome) = poolWithStaleInputMap.acceptIfNoDoubleSpend(utx2, System.currentTimeMillis())
+    outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    poolAfterReplace.pool.contains(tx1.id) shouldBe false
+    poolAfterReplace.pool.contains(tx2.id) shouldBe true
+  }
+
 }

@@ -78,16 +78,12 @@ trait WalletApiOperations extends ErgoBaseApiRoute {
     withWalletOp(op)(ApiResponse.apply[T])
   }
 
-  protected def withScanId(scanId: Int)(route: ScanId => Route): Route = {
-    if (scanId < Short.MinValue || scanId > Short.MaxValue) {
-      BadRequest(s"scanId $scanId is outside Short range")
-    } else {
-      route(ScanId @@ scanId.toShort)
-    }
+  protected def withScanId(scanId: Long)(route: ScanId => Route): Route = {
+    route(ScanId @@ scanId)
   }
 
   protected def withScanId(scanId: String)(route: ScanId => Route): Route = {
-    Try(scanId.toShort).toOption match {
+    Try(scanId.toLong).toOption match {
       case Some(id) => route(ScanId @@ id)
       case None => BadRequest(s"scanId $scanId is invalid")
     }

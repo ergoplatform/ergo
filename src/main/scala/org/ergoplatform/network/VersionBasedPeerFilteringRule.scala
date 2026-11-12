@@ -59,15 +59,12 @@ object SyncV2Filter extends VersionBasedPeerFilteringRule {
 }
 
 /**
-  * If peer's version is >= 6.0.9, the peer is supporting sync V3
+  * If peer advertises `SyncV3PeerFeature` during handshake, the peer is supporting sync V3
   */
-object SyncV3Filter extends VersionBasedPeerFilteringRule {
-  private val syncV3Version = Version(6, 0, 9)
-
-  override def condition(version: Version): Boolean = {
-    version.compare(syncV3Version) >= 0
+object SyncV3Filter extends PeerFilteringRule {
+  override def condition(peer: ConnectedPeer): Boolean = {
+    peer.supportsSyncV3
   }
-
 }
 
 

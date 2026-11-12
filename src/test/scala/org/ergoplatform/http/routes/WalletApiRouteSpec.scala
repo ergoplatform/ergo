@@ -265,6 +265,12 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "reject a malformed derivation path with the parser's message" in {
+    Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/x/1".asJson)) ~> route ~> check {
+      rejection shouldEqual ValidationRejection("For input string: \"x\"", None)
+    }
+  }
+
   it should "derive next key" in {
     Get(prefix + "/deriveNextKey") ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -349,6 +355,17 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
       response.size shouldBe walletTxs.size
       responseAs[Seq[AugWalletTransaction]] shouldEqual walletTxs
+    }
+  }
+
+  it should "return filtered wallet transactions" in {
+    Get(prefix + "/transactions?minInclusionHeight=1") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val expected = WalletActorStub.walletTxs.filter { awtx =>
+        awtx.wtx.scanIds.exists(_ <= WalletConstants.PaymentsScanId) &&
+          awtx.wtx.inclusionHeight >= 1
+      }
+      responseAs[Seq[AugWalletTransaction]] shouldEqual expected
     }
   }
 

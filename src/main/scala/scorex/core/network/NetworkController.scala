@@ -8,7 +8,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import scorex.core.app.ScorexContext
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
-import org.ergoplatform.network.{ModePeerFeature, Version}
+import org.ergoplatform.network.{ModePeerFeature, PeerFeature, SyncV3PeerFeature, Version}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.Message
@@ -56,6 +56,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   // capabilities of our node
   private val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
+  private val syncV3PeerFeature = SyncV3PeerFeature()
   private val messageHandlers = messageHandlersPartial(self)
 
   private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
@@ -402,7 +403,7 @@ class NetworkController(ergoSettings: ErgoSettings,
       }
     }
 
-    val mandatoryFeatures = Array(modePeerFeature, mySessionIdFeature)
+    val mandatoryFeatures: Array[PeerFeature] = Array(modePeerFeature, mySessionIdFeature, syncV3PeerFeature)
 
     val remoteAddress = connectionId.remoteAddress.getAddress
     val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)

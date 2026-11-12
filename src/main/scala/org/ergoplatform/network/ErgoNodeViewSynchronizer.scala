@@ -77,7 +77,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
 
-  private var syncInfoV3CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV3)] = Option.empty
+  private var syncInfoV3CacheByHeights: Option[((Int, Int, Int, Boolean), ErgoSyncInfoV3)] = Option.empty
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -356,12 +356,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def getV3SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV3 = {
-    val headersHeight = history.headersHeight
-    syncInfoV3CacheByHeadersHeight
-      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+    val cacheKey = (history.headersHeight, history.fullBlockHeight, history.minFullBlockAvailable, full)
+    syncInfoV3CacheByHeights
+      .collect { case (key, syncInfo) if key == cacheKey => syncInfo }
       .getOrElse {
         val v3SyncInfo = history.syncInfoV3(full)
-        syncInfoV3CacheByHeadersHeight = Some(headersHeight -> v3SyncInfo)
+        syncInfoV3CacheByHeights = Some(cacheKey -> v3SyncInfo)
         v3SyncInfo
       }
   }
@@ -383,7 +383,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * some time (see syncStatusRefreshStable / syncStatusRefreshStable settings),
     * or peers with Unknown / Fork / Older statuses.
     *
-    * Method sends V1/V2/V3 sync messages based on neighbour version.
+    * Method sends V1/V2/V3 sync messages based on neighbour version and advertised peer features.
     *
     */
   protected def sendSync(history: ErgoHistory): Unit = {

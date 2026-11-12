@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.network.{ModeFeatureSerializer, PeerFeature}
+import org.ergoplatform.network.{ModeFeatureSerializer, PeerFeature, SyncV3FeatureSerializer}
 import org.ergoplatform.network.peer.{LocalAddressPeerFeatureSerializer, RestApiUrlPeerFeatureSerializer, SessionIdPeerFeatureSerializer}
 
 /**
@@ -28,13 +28,19 @@ object PeerFeatureDescriptors {
   val ModeFeatureId: Byte = 16: Byte
 
   /**
+    * See `SyncV3PeerFeature`
+    */
+  val SyncV3FeatureId: Byte = 17: Byte
+
+  /**
     * All the peer feature serializers should be here
     */
   val FeatureSerializers: PeerFeature.Serializers = Map(
     LocalAddressPeerFeatureId -> LocalAddressPeerFeatureSerializer,
     SessionIdPeerFeatureId -> SessionIdPeerFeatureSerializer,
     RestApiUrlFeatureId -> RestApiUrlPeerFeatureSerializer,
-    ModeFeatureId -> ModeFeatureSerializer
+    ModeFeatureId -> ModeFeatureSerializer,
+    SyncV3FeatureId -> SyncV3FeatureSerializer
   )
 
 }

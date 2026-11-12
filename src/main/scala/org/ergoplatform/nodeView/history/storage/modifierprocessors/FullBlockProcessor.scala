@@ -75,7 +75,8 @@ trait FullBlockProcessor extends HeadersProcessor {
         .takeWhile(_.isDefined)
         .flatten
       logStatus(Seq(), toApply, fullBlock, None)
-      val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker)
+      val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
+        bestHeaderRowsOnTie(newBestBlockHeader)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes).map { _ =>
         ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
       }

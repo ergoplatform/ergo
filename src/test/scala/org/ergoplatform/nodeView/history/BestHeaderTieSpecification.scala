@@ -56,6 +56,29 @@ class BestHeaderTieSpecification extends ErgoCorePropertyTest with NoShrink {
     history.isInBestChain(a3.header) shouldBe false
   }
 
+  property("the first full block takes the best header on a tie") {
+    var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+    // a pruned node with headers only below its first full block height
+    val commonChain = genChain(2, history)
+    history = applyHeaderChain(history, HeaderChain(commonChain.map(_.header)))
+    history.writeMinimalFullBlockHeight(3)
+    history.isHeadersChainSyncedVar = true
+    val Seq(a3, b3) = siblings(2, commonChain.last)
+
+    history = applyHeaderChain(history, HeaderChain(Seq(a3.header)))
+    history.bestHeaderOpt.get shouldBe a3.header
+    history.bestFullBlockOpt shouldBe None
+
+    history = applyBlock(history, b3)
+
+    history.bestHeaderOpt.get shouldBe b3.header
+    history.bestFullBlockOpt.get.header shouldBe b3.header
+    history.bestHeaderIdAtHeight(3) shouldBe Some(b3.header.id)
+    history.headerIdsAtHeight(3) shouldBe Seq(b3.header.id, a3.header.id)
+    history.isInBestChain(b3.header) shouldBe true
+    history.isInBestChain(a3.header) shouldBe false
+  }
+
   property("the first sibling with a body is applied, a header without a body does not hold the full chain") {
     var (history, ancestor) = twoBlockHistory()
     val withheld +: honest = siblings(4, ancestor)

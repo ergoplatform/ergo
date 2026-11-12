@@ -3,7 +3,7 @@ package org.ergoplatform.utils.generators
 import java.net.{InetAddress, InetSocketAddress, URL}
 import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId}
-import org.ergoplatform.network.{ModePeerFeature, PeerFeature, PeerSpec, Version}
+import org.ergoplatform.network.{ModePeerFeature, PeerFeature, PeerSpec, SyncV3PeerFeature, Version}
 import org.ergoplatform.nodeView.state.StateType
 import org.scalacheck.Gen.{const, some}
 import org.scalacheck.{Arbitrary, Gen}
@@ -87,7 +87,7 @@ object CoreObjectGenerators {
 
   def peerSpecGen: Gen[PeerSpec] = for {
     declaredAddress <- Gen.frequency(5 -> const(None), 5 -> some(inetSocketAddressGen))
-    features: Seq[PeerFeature] <- Gen.someOf(modePeerFeatureGen, urlGen.flatMap(url => RestApiUrlPeerFeature(url)))
+    features: Seq[PeerFeature] <- Gen.someOf(modePeerFeatureGen, const(SyncV3PeerFeature()), urlGen.flatMap(url => RestApiUrlPeerFeature(url)))
     version <- appVersionGen
   } yield PeerSpec("ergoref", version, "ergo-node", declaredAddress, features)
 

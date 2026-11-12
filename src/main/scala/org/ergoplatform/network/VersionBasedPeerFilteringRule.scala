@@ -58,6 +58,15 @@ object SyncV2Filter extends VersionBasedPeerFilteringRule {
 
 }
 
+/**
+  * If peer advertises `SyncV3PeerFeature` during handshake, the peer is supporting sync V3
+  */
+object SyncV3Filter extends PeerFilteringRule {
+  override def condition(peer: ConnectedPeer): Boolean = {
+    peer.supportsSyncV3
+  }
+}
+
 
 /**
   * Filter used to differentiate peers supporting UTXO state snapshots, so possibly
@@ -98,7 +107,7 @@ object NipopowSupportFilter extends PeerFilteringRule {
   */
 object BlockSectionsDownloadFilter extends PeerFilteringRule {
   override def condition(peer: ConnectedPeer): Boolean = {
-    peer.mode.exists(_.allBlocksAvailable)
+    peer.mode.exists(m => m.allBlocksAvailable || m.blocksToKeep > 0)
   }
 }
 

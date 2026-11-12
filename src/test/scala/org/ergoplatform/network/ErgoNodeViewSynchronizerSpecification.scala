@@ -13,7 +13,7 @@ import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2, ErgoSyncInfoV3}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
@@ -30,7 +30,7 @@ import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer, SendToPeers}
 import scorex.crypto.authds.ADKey
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
@@ -1913,6 +1913,102 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // the invalidated decline did not occupy a slot in the declined table
       synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe 0
+    }
+  }
+
+  property("NodeViewSynchronizer: sends SyncInfoV2 to >= 6.0.9 peers without SyncV3PeerFeature and SyncInfoV3 only to peers advertising SyncV3PeerFeature") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 3, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      val modeFeat = ModePeerFeature(StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept)
+
+      // Peer at v6.1.7 that does NOT advertise SyncV3PeerFeature
+      val releaseV617Peer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(
+          defaultPeerSpec.copy(protocolVersion = Version(6, 1, 7), features = Seq(modeFeat)),
+          System.currentTimeMillis()
+        ))
+      )
+
+      // Peer that explicitly advertises SyncV3PeerFeature in handshake
+      val syncV3Peer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(
+          defaultPeerSpec.copy(protocolVersion = Version(6, 0, 11), features = Seq(modeFeat, SyncV3PeerFeature())),
+          System.currentTimeMillis()
+        ))
+      )
+
+      // 1) Reply path (processSyncV2 -> syncSendNeeded):
+      // Empty SyncInfoV2 from v6.1.7 peer (status Younger) must get a SyncInfoV2 reply, NOT SyncInfoV3
+      val emptyV2Bytes = ErgoSyncInfoMessageSpec.toBytes(ErgoSyncInfoV2(Seq.empty))
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(emptyV2Bytes), Some(releaseV617Peer))
+
+      val replyToV617 = ncProbe.fishForMessage(3.seconds) {
+        case SendToNetwork(msg, SendToPeer(target))
+          if target == releaseV617Peer && msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode => true
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      replyToV617.message.data.get shouldBe a[ErgoSyncInfoV2]
+
+      // Empty SyncInfoV2 from SyncV3PeerFeature peer gets SyncInfoV3 reply
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(emptyV2Bytes), Some(syncV3Peer))
+
+      val replyToV3Peer = ncProbe.fishForMessage(3.seconds) {
+        case SendToNetwork(msg, SendToPeer(target))
+          if target == syncV3Peer && msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode => true
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      replyToV3Peer.message.data.get shouldBe a[ErgoSyncInfoV3]
+
+      // 2) Proactive sendSync path (SendLocalSyncInfo) with fresh Unknown-status peers:
+      val proactiveV650Peer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(
+          defaultPeerSpec.copy(protocolVersion = Version(6, 5, 0), features = Seq(modeFeat)),
+          System.currentTimeMillis()
+        ))
+      )
+      val proactiveV3Peer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(
+          defaultPeerSpec.copy(protocolVersion = Version(6, 0, 11), features = Seq(modeFeat, SyncV3PeerFeature())),
+          System.currentTimeMillis()
+        ))
+      )
+      syncTracker.updateStatus(proactiveV650Peer, org.ergoplatform.consensus.Unknown, None)
+      syncTracker.updateStatus(proactiveV3Peer, org.ergoplatform.consensus.Unknown, None)
+      synchronizerMockRef ! SendLocalSyncInfo
+
+      var sawV2ForReleasePeer = false
+      var sawV3ForFeaturePeer = false
+      while (!sawV2ForReleasePeer || !sawV3ForFeaturePeer) {
+        ncProbe.fishForMessage(3.seconds) {
+          case SendToNetwork(msg, SendToPeers(peers)) if msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode =>
+            msg.data.get match {
+              case _: ErgoSyncInfoV2 if peers.contains(proactiveV650Peer) && !peers.contains(proactiveV3Peer) =>
+                sawV2ForReleasePeer = true
+                true
+              case _: ErgoSyncInfoV3 if peers.contains(proactiveV3Peer) && !peers.contains(proactiveV650Peer) =>
+                sawV3ForFeaturePeer = true
+                true
+              case _ => false
+            }
+          case _ => false
+        }
+      }
+      sawV2ForReleasePeer shouldBe true
+      sawV3ForFeaturePeer shouldBe true
     }
   }
 

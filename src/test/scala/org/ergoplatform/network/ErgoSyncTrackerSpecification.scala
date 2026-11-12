@@ -110,4 +110,70 @@ class ErgoSyncTrackerSpecification extends ErgoCorePropertyTest {
     syncTracker.peersByStatus.get(Equal) shouldBe None
     syncTracker.peersByStatus.isEmpty shouldBe true
   }
+
+  property("storedHeaders and storedFullblocks ranges in ErgoPeerStatus") {
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+    val peer = createPeer("v3peer", 9010)
+
+    syncTracker.updateStatus(
+      peer,
+      Older,
+      Some(1000),
+      peerHeaders = Seq(1 -> 500, 600 -> 1000),
+      peerFullblocks = Seq(800 -> 1000)
+    )
+
+    val status = syncTracker.statuses(peer)
+    status.headersHeight shouldBe 1000
+    status.storedHeaders shouldBe Seq(1 -> 500, 600 -> 1000)
+    status.storedFullblocks shouldBe Seq(800 -> 1000)
+
+    status.hasHeaderAt(250) shouldBe true
+    status.hasHeaderAt(550) shouldBe false
+    status.hasHeaderAt(750) shouldBe true
+    status.hasHeaderAt(1001) shouldBe false
+
+    status.hasFullBlockAt(799) shouldBe false
+    status.hasFullBlockAt(800) shouldBe true
+    status.hasFullBlockAt(1000) shouldBe true
+    status.hasFullBlockAt(1001) shouldBe false
+  }
+
+  property("SyncV3Filter selects peers by SyncV3PeerFeature, not by protocolVersion >= 6.0.9") {
+    def peerWithSpec(spec: PeerSpec, port: Int): ConnectedPeer = {
+      val info = PeerInfo(spec, System.currentTimeMillis(), Some(Incoming), 5L)
+      val cid = ConnectionId(
+        new java.net.InetSocketAddress("127.0.0.1", port),
+        new java.net.InetSocketAddress("127.0.0.1", port + 1000),
+        Incoming
+      )
+      ConnectedPeer(cid, handlerRef = null, Some(info))
+    }
+
+    // Release nodes at 6.0.11, 6.1.7, and 6.5.0 without SyncV3PeerFeature must NOT receive SyncInfoV3
+    val v6011NoFeature = peerWithSpec(defaultPeerSpec.copy(protocolVersion = Version(6, 0, 11), features = Seq.empty), 9101)
+    val v617NoFeature = peerWithSpec(defaultPeerSpec.copy(protocolVersion = Version(6, 1, 7), features = Seq.empty), 9102)
+    val v650NoFeature = peerWithSpec(defaultPeerSpec.copy(protocolVersion = Version(6, 5, 0), features = Seq.empty), 9103)
+
+    SyncV3Filter.condition(v6011NoFeature) shouldBe false
+    SyncV3Filter.condition(v617NoFeature) shouldBe false
+    SyncV3Filter.condition(v650NoFeature) shouldBe false
+
+    SyncV2Filter.condition(v6011NoFeature) shouldBe true
+    SyncV2Filter.condition(v617NoFeature) shouldBe true
+    SyncV2Filter.condition(v650NoFeature) shouldBe true
+
+    // Peers advertising SyncV3PeerFeature in handshake receive SyncInfoV3 regardless of version line
+    val v608WithFeature = peerWithSpec(
+      defaultPeerSpec.copy(protocolVersion = Version(6, 0, 8), features = Seq(SyncV3PeerFeature())),
+      9104
+    )
+    val v6011WithFeature = peerWithSpec(
+      defaultPeerSpec.copy(protocolVersion = Version(6, 0, 11), features = Seq(SyncV3PeerFeature())),
+      9105
+    )
+
+    SyncV3Filter.condition(v608WithFeature) shouldBe true
+    SyncV3Filter.condition(v6011WithFeature) shouldBe true
+  }
 }

@@ -2,7 +2,7 @@ package scorex.core.network
 
 import akka.actor.ActorRef
 import io.circe.{Encoder, Json}
-import org.ergoplatform.network.ModePeerFeature
+import org.ergoplatform.network.{ModePeerFeature, SyncV3PeerFeature}
 import org.ergoplatform.network.peer.PeerInfo
 
 /**
@@ -31,6 +31,13 @@ case class ConnectedPeer(connectionId: ConnectionId,
     */
   lazy val mode: Option[ModePeerFeature] = {
     peerInfo.flatMap(_.peerSpec.features.collectFirst[ModePeerFeature]({ case mf: ModePeerFeature => mf }))
+  }
+
+  /**
+    * Whether the peer advertised SyncInfo V3 capability during handshake
+    */
+  lazy val supportsSyncV3: Boolean = {
+    peerInfo.exists(_.peerSpec.features.collectFirst[SyncV3PeerFeature]({ case sf: SyncV3PeerFeature => sf }).isDefined)
   }
 
 }

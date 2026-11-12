@@ -23,6 +23,17 @@ trait ToDownloadProcessor
   // than headerChainDiff blocks on average from future
   private lazy val headerChainDiff = settings.nodeSettings.headerChainDiff
 
+  protected val modifierHeightsCache = new java.util.concurrent.ConcurrentHashMap[ModifierId, Height]()
+
+  private def cacheModifierHeights(h: Header, mods: Seq[(NetworkObjectTypeId.Value, ModifierId)]): Unit = {
+    if (modifierHeightsCache.size() > 8192) {
+      modifierHeightsCache.clear()
+    }
+    mods.foreach { case (_, mid) =>
+      modifierHeightsCache.put(mid, h.height)
+    }
+  }
+
   protected def nodeSettings: NodeConfigurationSettings = settings.nodeSettings
 
   protected def chainSettings: ChainSettings = settings.chainSettings
@@ -154,13 +165,15 @@ trait ToDownloadProcessor
     * @return block sections needed to be downloaded after header `h` , and defined by the header
     */
   def requiredModifiersForHeader(h: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
-    if (!nodeSettings.verifyTransactions) {
+    val mods = if (!nodeSettings.verifyTransactions) {
       Nil // no block sections to be downloaded in SPV mode
     } else if (nodeSettings.stateType.requireProofs) {
       h.sectionIds // download block transactions, extension and UTXO set transformations proofs in "digest" mode
     } else {
       h.sectionIdsWithNoProof // do not download UTXO set transformation proofs if UTXO set is stored
     }
+    cacheModifierHeights(h, mods)
+    mods
   }
 
 }

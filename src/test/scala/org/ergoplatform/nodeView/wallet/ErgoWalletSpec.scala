@@ -17,6 +17,7 @@ import org.ergoplatform.utils._
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
+import org.ergoplatform.wallet.crypto.MessageSigning
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
@@ -91,6 +92,37 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val lockedFailure = await(wallet.updateChangeAddress(alternateOwnedAddress).failed)
       lockedFailure shouldBe a[WalletLockedForChangeAddress]
       lockedFailure.getMessage should include("locked")
+    }
+  }
+
+  property("messages are signed through the wallet actor") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val message = "I am the owner of this address".getBytes("UTF-8")
+
+      val signed = await(wallet.signMessage(message, None)).get
+      addresses should contain(signed.address)
+      MessageSigning.unwrap(signed.signedMessage).map(_.toSeq) shouldBe
+        Some(message.toSeq)
+      MessageSigning.verify(
+        signed.address.pubkey, signed.signedMessage, signed.proof) shouldBe true
+
+      val chosen = addresses.last
+      val signedForChosen = await(wallet.signMessage(message, Some(chosen))).get
+      signedForChosen.address shouldBe chosen
+      MessageSigning.verify(
+        chosen.pubkey, signedForChosen.signedMessage, signedForChosen.proof) shouldBe true
+
+      val unowned =
+        P2PKAddress(DLogProverInput.random().publicImage)(settings.addressEncoder)
+      await(wallet.signMessage(message, Some(unowned))).isFailure shouldBe true
+
+      wallet.lockWallet()
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
+      eventually {
+        await(wallet.getWalletStatus).unlocked shouldBe false
+      }
+      await(wallet.signMessage(message, None)).isFailure shouldBe true
     }
   }
 

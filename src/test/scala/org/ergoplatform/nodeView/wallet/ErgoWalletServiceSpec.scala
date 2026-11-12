@@ -13,12 +13,12 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
   WalletLockedForChangeAddress
 }
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
-import org.ergoplatform.settings.Constants.TrueTree
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.validErgoTransactionGen
@@ -35,7 +35,7 @@ import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
-import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigma.ast.{ByteArrayConstant, ErgoTree, EvaluatedValue, FalseLeaf, SType}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers.testBox
@@ -71,7 +71,6 @@ class ErgoWalletServiceSpec
       new WalletStorage(store, settings),
       secretStorageOpt = Option.empty,
       new WalletRegistry(versionedStore)(settings.walletSettings),
-      OffChainRegistry.empty,
       outputsFilter = Option.empty,
       WalletVars(Some(defaultProver), Seq.empty, None),
       stateReaderOpt = Option.empty,
@@ -81,6 +80,165 @@ class ErgoWalletServiceSpec
       maxInputsToUse = 1000,
       rescanInProgress = false
     )
+  }
+
+  property("off-chain boxes and digest are derived from the mempool on demand") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val pk = ErgoTree.fromSigmaBoolean(defaultProver.hdPubKeys.head.key)
+        val value = 1000000000L
+
+        // a mempool transaction creating a wallet box
+        val creatingTx =
+          ErgoTransaction(fakeInputs, IndexedSeq(new ErgoBoxCandidate(value, pk, creationHeight = 1)))
+        val withCreated =
+          initialState(store, versionedStore, Some(new FakeMempool(Seq(UnconfirmedTransaction(creatingTx, None)))))
+        withCreated.offChainBoxes.map(_.box.value).sum shouldBe value
+        withCreated.offChainDigest.walletBalance shouldBe value
+
+        // a second mempool transaction spending that off-chain box (chained tx) must remove it
+        val spendingTx = new ErgoTransaction(
+          IndexedSeq(Input(creatingTx.outputs.head.id, emptyProverResult)),
+          IndexedSeq.empty,
+          IndexedSeq(new ErgoBoxCandidate(value, FalseTree, creationHeight = 1)))
+        val withSpent = initialState(
+          store,
+          versionedStore,
+          Some(new FakeMempool(Seq(UnconfirmedTransaction(creatingTx, None), UnconfirmedTransaction(spendingTx, None)))))
+        withSpent.offChainBoxes shouldBe empty
+        withSpent.offChainDigest.walletBalance shouldBe 0
+
+        // once the creating transaction's box is confirmed on-chain it must not be counted both as
+        // confirmed and off-chain while the mempool snapshot still holds that transaction
+        val confirmedState =
+          initialState(store, versionedStore, Some(new FakeMempool(Seq(UnconfirmedTransaction(creatingTx, None)))))
+        val confirmedBox =
+          TrackedBox(creatingTx.id, 0, Some(1), None, None, creatingTx.outputs.head, Set(PaymentsScanId))
+        confirmedState.registry
+          .updateOnBlock(ScanResults(Seq(confirmedBox), ArraySeq.empty, Seq.empty), modifierIdGen.sample.get, 1)
+          .get
+        confirmedState.offChainBoxes shouldBe empty
+        confirmedState.offChainDigest.walletBalance shouldBe value
+      }
+    }
+  }
+
+  property("scan unspent boxes hide confirmed boxes spent in the mempool when considering unconfirmed") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val pk = ErgoTree.fromSigmaBoolean(defaultProver.hdPubKeys.head.key)
+        val value = 1000000000L
+        val confirmedTx =
+          ErgoTransaction(fakeInputs, IndexedSeq(new ErgoBoxCandidate(value, pk, creationHeight = 1)))
+        val confirmedBox =
+          TrackedBox(confirmedTx.id, 0, Some(1), None, None, confirmedTx.outputs.head, Set(PaymentsScanId))
+        // a mempool transaction spending the confirmed box
+        val spendingTx = new ErgoTransaction(
+          IndexedSeq(Input(confirmedTx.outputs.head.id, emptyProverResult)),
+          IndexedSeq.empty,
+          IndexedSeq(new ErgoBoxCandidate(value, FalseTree, creationHeight = 1)))
+        val state =
+          initialState(store, versionedStore, Some(new FakeMempool(Seq(UnconfirmedTransaction(spendingTx, None)))))
+        state.registry
+          .updateOnBlock(ScanResults(Seq(confirmedBox), ArraySeq.empty, Seq.empty), modifierIdGen.sample.get, 1)
+          .get
+        val walletService = new ErgoWalletServiceImpl(settings)
+
+        // considering unconfirmed: the box spent by the mempool transaction is not reported as unspent
+        walletService.getScanUnspentBoxes(state, PaymentsScanId, considerUnconfirmed = true, 0, Int.MaxValue) shouldBe empty
+        // ignoring the mempool: the confirmed box is still reported
+        walletService
+          .getScanUnspentBoxes(state, PaymentsScanId, considerUnconfirmed = false, 0, Int.MaxValue)
+          .map(_.trackedBox) shouldBe Seq(confirmedBox)
+      }
+    }
+  }
+
+  property("a scan's removeOffchain policy and ScanWalletInteraction.Off do not leak into wallet balance or payment boxes") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val pk = ErgoTree.fromSigmaBoolean(defaultProver.hdPubKeys.head.key)
+        val value = 1000000000L
+        val externalScanId: ScanId = ScanId @@ 51.toShort
+        val offWalletScanId: ScanId = ScanId @@ 52.toShort
+        // an external scan that shares wallet boxes and keeps them visible after they are spent
+        val scan = ScanRequest(
+          "ext",
+          EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(pk.bytes)),
+          Some(ScanWalletInteraction.Shared),
+          Some(false)).toScan(externalScanId).get
+        // an external scan with ScanWalletInteraction.Off tracking non-wallet TrueTree boxes
+        val offWalletScan = ScanRequest(
+          "off-wallet",
+          EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(TrueTree.bytes)),
+          Some(ScanWalletInteraction.Off),
+          Some(true)).toScan(offWalletScanId).get
+        val walletVars = WalletVars(Some(defaultProver), Seq(scan, offWalletScan), None)
+
+        // a payment box (also tracked by the external scan) created and then spent within the mempool,
+        // plus an unspent TrueTree box tracked only by offWalletScan (ScanWalletInteraction.Off)
+        val creatingTx =
+          ErgoTransaction(fakeInputs, IndexedSeq(new ErgoBoxCandidate(value, pk, creationHeight = 1)))
+        val spendingTx = new ErgoTransaction(
+          IndexedSeq(Input(creatingTx.outputs.head.id, emptyProverResult)),
+          IndexedSeq.empty,
+          IndexedSeq(new ErgoBoxCandidate(value, TrueTree, creationHeight = 1)))
+        val mempool =
+          new FakeMempool(Seq(UnconfirmedTransaction(creatingTx, None), UnconfirmedTransaction(spendingTx, None)))
+        val state = ErgoWalletState(
+          new WalletStorage(store, settings),
+          secretStorageOpt = Option.empty,
+          new WalletRegistry(versionedStore)(settings.walletSettings),
+          outputsFilter = Option.empty,
+          walletVars,
+          stateReaderOpt = Option.empty,
+          mempoolReaderOpt = Some(mempool),
+          utxoStateReaderOpt = Option.empty,
+          parameters,
+          maxInputsToUse = 1000,
+          rescanInProgress = false
+        )
+        val walletService = new ErgoWalletServiceImpl(settings)
+
+        // the spent payment box and the ScanWalletInteraction.Off box are not counted in wallet balance/boxes
+        state.offChainDigest.walletBalance shouldBe 0
+        state.offChainBoxes shouldBe empty
+        state.getBoxesToSpend shouldBe empty
+        walletService.getWalletBoxes(state, unspentOnly = true, considerUnconfirmed = true) shouldBe empty
+        // the opted-in external scan still lists the spent box ...
+        walletService
+          .getScanUnspentBoxes(state, externalScanId, considerUnconfirmed = true, 0, Int.MaxValue)
+          .map(_.trackedBox.box.value) shouldBe Seq(value)
+        // ... the ScanWalletInteraction.Off scan lists its unspent TrueTree box ...
+        walletService
+          .getScanUnspentBoxes(state, offWalletScanId, considerUnconfirmed = true, 0, Int.MaxValue)
+          .map(_.trackedBox.box.value) shouldBe Seq(value)
+        // ... and neither leaks into the payment wallet's scan view
+        walletService.getScanUnspentBoxes(state, PaymentsScanId, considerUnconfirmed = true, 0, Int.MaxValue) shouldBe empty
+      }
+    }
+  }
+
+  property("a mempool output whose creating transaction is already confirmed is not resurrected off-chain") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val pk = ErgoTree.fromSigmaBoolean(defaultProver.hdPubKeys.head.key)
+        val value = 1000000000L
+        val creatingTx =
+          ErgoTransaction(fakeInputs, IndexedSeq(new ErgoBoxCandidate(value, pk, creationHeight = 1)))
+        val state =
+          initialState(store, versionedStore, Some(new FakeMempool(Seq(UnconfirmedTransaction(creatingTx, None)))))
+        // record the creating transaction as confirmed but with no box (mimicking a box already spent
+        // on-chain and pruned, as happens with the default keepSpentBoxes = false)
+        val walletTx = WalletTransaction(creatingTx, 1, Seq(PaymentsScanId))
+        state.registry
+          .updateOnBlock(ScanResults(Seq.empty, ArraySeq.empty, Seq(walletTx)), modifierIdGen.sample.get, 1)
+          .get
+        // the pruned output must not reappear as off-chain just because the registry no longer holds it
+        state.offChainBoxes shouldBe empty
+        state.offChainDigest.walletBalance shouldBe 0
+      }
+    }
   }
 
   private final class InitializationFixture(val settings: ErgoSettings) {

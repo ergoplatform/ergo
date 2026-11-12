@@ -55,7 +55,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
   }
 
   it should "deregister a scan" in {
-    var scanId: ScanIdWrapper = ScanIdWrapper(ScanId @@ (-1000: Short)) // improper value
+    var scanId: ScanIdWrapper = ScanIdWrapper(ScanId @@ -1000L) // improper value
 
     // first, register an app
     Post(prefix + "/register", appRequest.asJson) ~> route ~> check {
@@ -102,12 +102,20 @@ class ScanApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "reject scan ids outside Short range" in {
+  it should "accept Long scan ids and reject scan ids outside Long range" in {
     Get(prefix + "/unspentBoxes/70000") ~> sealedRoute ~> check {
-      status shouldBe StatusCodes.BadRequest
+      status shouldBe StatusCodes.OK
     }
 
     Get(prefix + "/spentBoxes/70000") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.OK
+    }
+
+    Get(prefix + "/unspentBoxes/9223372036854775808") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Get(prefix + "/spentBoxes/9223372036854775808") ~> sealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }
@@ -264,7 +272,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
   }
 
   it should "stop tracking a box" in {
-    val scanIdBoxId = ScanIdBoxId(ScanId @@ (51: Short), ADKey @@ Random.randomBytes(32))
+    val scanIdBoxId = ScanIdBoxId(ScanId @@ 51L, ADKey @@ Random.randomBytes(32))
 
     Post(prefix + "/stopTracking", scanIdBoxId.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -275,7 +283,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
     Post(prefix + "/p2sRule", "Ms7smJmdbakqfwNo") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val res = responseAs[Json]
-      res.hcursor.downField("scanId").as[Int].toOption.isDefined shouldBe true
+      res.hcursor.downField("scanId").as[Long].toOption.isDefined shouldBe true
     }
 
     Post(prefix + "/p2sRule", "s7smJmdbakqfwNo") ~> route ~> check {

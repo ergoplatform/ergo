@@ -225,7 +225,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), mutable.WrappedArray.empty)
 
       case AddScan(req) =>
-        val scanId = ScanId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort
+        val scanId = ScanId @@ (apps.lastOption.map(_._1).getOrElse(100L) + 1L)
         val app = req.toScan(scanId)
         apps += scanId -> app.get
         sender() ! AddScanResponse(app)

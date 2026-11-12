@@ -88,7 +88,8 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @return sequences of all the unspent boxes from the database
     */
   def allUnspentBoxes(): Seq[TrackedBox] = {
-    store.getRange(firstUnspentBoxKey, lastUnspentBoxKey)
+    (store.getRange(firstUnspentBoxKey, lastUnspentBoxKey) ++
+      store.getRange(firstLongUnspentBoxKey, lastLongUnspentBoxKey))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
       }
@@ -484,6 +485,24 @@ object WalletRegistry {
   // All the unspent boxes range, dependless on scan
   private val firstUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(34)(0: Byte)
   private val lastUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(34)(-1: Byte)
+  private val firstLongUnspentBoxKey = longIndexPrefix(UnspentIndexPrefix) +: Array.fill(40)(0: Byte)
+  private val lastLongUnspentBoxKey = longIndexPrefix(UnspentIndexPrefix) +: Array.fill(40)(-1: Byte)
+
+  // Reserve the high-bit variants of the four scan index prefixes for Long keys.
+  @inline private def longIndexPrefix(prefix: Byte): Byte = (prefix ^ 0x80).toByte
+
+  @inline private def scanIdKeySize(scanId: ScanId): Int =
+    if (Constants.isLegacyShortScanId(scanId)) 2 else 8
+
+  @inline private def putScanIdKey(buf: Array[Byte], pos: Int, scanId: ScanId): Int = {
+    if (Constants.isLegacyShortScanId(scanId)) {
+      putShort(buf, pos, scanId.toShort)
+      pos + 2
+    } else {
+      putLong(buf, pos, scanId)
+      pos + 8
+    }
+  }
 
   /** Performance optimized helper, which avoid unnecessary allocations and creates the resulting
     * key bytes directly from the given parameters.
@@ -492,38 +511,42 @@ object WalletRegistry {
     * @return prefix | scanId | Array.fill(32)(suffix)  bytes packed in an array
     */
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, suffix: Byte): Array[Byte] = {
-    val res = new Array[Byte](35) // 1 + 2 + 32
-    res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putReplicated(res, pos = 3, n = 32, suffix)
+    val scanKeySize = scanIdKeySize(scanId)
+    val res = new Array[Byte](1 + scanKeySize + 32)
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
+    val nextPos = putScanIdKey(res, pos = 1, scanId)
+    putReplicated(res, pos = nextPos, n = 32, suffix)
     res
   }
 
   /** Same as [[composeKey()]] where suffix is given by id. */
   private[persistence] final def composeKeyWithId(prefix: Byte, scanId: ScanId, suffixId: Array[Byte]): Array[Byte] = {
-    val res = new Array[Byte](3 + suffixId.length) // 1 byte for prefix + 2 for scanId
-    res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putBytes(res, pos = 3, suffixId)
+    val scanKeySize = scanIdKeySize(scanId)
+    val res = new Array[Byte](1 + scanKeySize + suffixId.length)
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
+    val nextPos = putScanIdKey(res, pos = 1, scanId)
+    putBytes(res, pos = nextPos, suffixId)
     res
   }
 
   /** Same as [[composeKey()]] with additional height parameter. */
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int, suffix: Byte): Array[Byte] = {
-    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height + 32 for suffix
-    res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putInt(res, pos = 3, height)
-    putReplicated(res, 7, 32, suffix)
+    val scanKeySize = scanIdKeySize(scanId)
+    val res = new Array[Byte](1 + scanKeySize + 4 + 32)
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
+    val nextPos = putScanIdKey(res, pos = 1, scanId)
+    putInt(res, pos = nextPos, height)
+    putReplicated(res, nextPos + 4, 32, suffix)
     res
   }
 
   /** Same as [[composeKey()]] with additional height parameter. */
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int): Array[Byte] = {
-    val res = new Array[Byte](39) // 1 byte for prefix + 2 for scanId + 4 for height
-    res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putInt(res, pos = 3, height)
+    val scanKeySize = scanIdKeySize(scanId)
+    val res = new Array[Byte](1 + scanKeySize + 4 + 32)
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
+    val nextPos = putScanIdKey(res, pos = 1, scanId)
+    putInt(res, pos = nextPos, height)
     res
   }
 
@@ -531,11 +554,12 @@ object WalletRegistry {
   /** Same as [[composeKey()]] with additional height parameter and suffix given by id. */
   private[persistence] final def composeKeyWithHeightAndId(prefix: Byte, scanId: ScanId,
                                                            height: Int, suffixId: Array[Byte]): Array[Byte] = {
-    val res = new Array[Byte](7 + suffixId.length) // 1 byte for prefix + 2 for scanId + 4 for height
-    res(0) = prefix
-    putShort(res, pos = 1, scanId)
-    putInt(res, pos = 3, height)
-    putBytes(res, 7, suffixId)
+    val scanKeySize = scanIdKeySize(scanId)
+    val res = new Array[Byte](1 + scanKeySize + 4 + suffixId.length)
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
+    val nextPos = putScanIdKey(res, pos = 1, scanId)
+    putInt(res, pos = nextPos, height)
+    putBytes(res, nextPos + 4, suffixId)
     res
   }
 

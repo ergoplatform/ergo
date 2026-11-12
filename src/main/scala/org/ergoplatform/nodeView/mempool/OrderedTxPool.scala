@@ -240,10 +240,10 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
   /**
     *
     * Form families of transactions: take in account relations between transactions when performing ordering.
-    * If transaction X is spending output of transaction Y, then X weight should be greater than of Y.
-    * Y should be proceeded prior to X or swapped out of mempool after X.
+    * If transaction X is spending or referencing (via dataInputs) output of transaction Y, then Y weight should be
+    * greater than of X. Y should be proceeded prior to X or swapped out of mempool after X.
     * To achieve this goal we recursively add weight of new transaction to all transactions which
-    * outputs it directly or indirectly spending.
+    * outputs it directly or indirectly spends or references via dataInputs.
     *
     * @param tx
     * @param weight
@@ -261,7 +261,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       this
     } else {
 
-      val uniqueTxIds: Set[WeightedTxId] = tx.inputs.flatMap(input => this.outputs.get(input.boxId)).toSet
+      val parentBoxIds = tx.inputs.map(_.boxId) ++ tx.dataInputs.map(_.boxId)
+      val uniqueTxIds: Set[WeightedTxId] = parentBoxIds.flatMap(boxId => this.outputs.get(boxId)).toSet
       val parentTxs = uniqueTxIds.flatMap(wtx => this.orderedTransactions.get(wtx).map(ut => wtx -> ut))
 
       parentTxs.foldLeft(this) { case (pool, (snapshotWtx, _)) =>

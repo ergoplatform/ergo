@@ -125,8 +125,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     val doubleSpentTransactionIds = tx.inputs.flatMap(i =>
       poolWithoutTx.pool.inputs.get(i.boxId)
     ).toSet
-    val doubleSpentTransactions = doubleSpentTransactionIds.flatMap { txId =>
-      poolWithoutTx.pool.orderedTransactions.get(txId)
+    val doubleSpentTransactions = doubleSpentTransactionIds.flatMap { wtx =>
+      poolWithoutTx.pool.get(wtx.id).orElse(poolWithoutTx.pool.orderedTransactions.get(wtx))
     }
     doubleSpentTransactions.foldLeft(poolWithoutTx) { case (pool, tx) =>
       removeTx(pool, tx.transaction)

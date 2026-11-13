@@ -84,17 +84,6 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
   }
 
 
-  /**
-    * Add new transaction to the pool and throw away from the pool transaction with the smallest weight
-    * if pool is overflown. We should first add transaction and only after it find candidate for replacement
-    * because new transaction may affect weights of existed transaction in mempool (see updateFamily).
-    * So candidate for replacement (transaction with minimal weight) can be changed after adding new transaction.
-    * An admission precheck may use the old weights; updateFamily can then make the
-    * incoming transaction the lowest-weight victim. The caller must check that it remains.
-    *
-    * @param unconfirmedTx - transaction to add
-    * @return - modified pool
-    */
   private def outputsWithout(tx: ErgoTransaction): TreeMap[BoxId, WeightedTxId] =
     tx.outputs.foldLeft(outputs) { case (acc, box) =>
       acc.get(box.id) match {
@@ -111,6 +100,17 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       }
     }
 
+  /**
+    * Add new transaction to the pool and throw away from the pool transaction with the smallest weight
+    * if pool is overflown. We should first add transaction and only after it find candidate for replacement
+    * because new transaction may affect weights of existed transaction in mempool (see updateFamily).
+    * So candidate for replacement (transaction with minimal weight) can be changed after adding new transaction.
+    * An admission precheck may use the old weights; updateFamily can then make the
+    * incoming transaction the lowest-weight victim. The caller must check that it remains.
+    *
+    * @param unconfirmedTx - transaction to add
+    * @return - modified pool
+    */
   def put(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
 

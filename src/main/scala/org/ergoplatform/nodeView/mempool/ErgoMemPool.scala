@@ -334,12 +334,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     *
     * @param tx - transaction to check
     */
-  private[mempool] def containsStorageRentClaim(tx: ErgoTransaction): Boolean = {
-    tx.inputs.exists { input =>
-      input.spendingProof.proof.isEmpty &&
-        input.spendingProof.extension.values.contains(Constants.StorageIndexVarId)
-    }
-  }
+  private[mempool] def containsStorageRentClaim(tx: ErgoTransaction): Boolean =
+    ErgoMemPool.containsStorageRentClaim(tx)
 
   def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTx.transaction
@@ -404,12 +400,27 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                   }
                 }
 
+                val usesBlockchainContext =
+                  ErgoMemPool.containsStorageRentClaim(tx) ||
+                    resolvedInputs.exists(_.exists(b =>
+                      b.ergoTree.isUsingBlockchainContext || b.ergoTree.hasDeserialize
+                    ))
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
                 utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>
-                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime, Some(utxo))
+                    val updatedTx = unconfirmedTx.withValidationResult(
+                      usesBlockchainContext = usesBlockchainContext,
+                      isValid = true,
+                      costOpt = Some(cost)
+                    )
+                    acceptIfNoDoubleSpend(updatedTx, validationStartTime, Some(utxo))
                   case Failure(ex) =>
-                    this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
+                    val updatedTx = unconfirmedTx.withValidationResult(
+                      usesBlockchainContext = usesBlockchainContext,
+                      isValid = false,
+                      costOpt = None
+                    )
+                    this.invalidate(updatedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
                 }
               } else {
                 val exc = new Exception("not all utxos in place yet")
@@ -503,6 +514,13 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 }
 
 object ErgoMemPool extends ScorexLogging {
+  private[ergoplatform] def containsStorageRentClaim(tx: ErgoTransaction): Boolean = {
+    tx.inputs.exists { input =>
+      input.spendingProof.proof.isEmpty &&
+        input.spendingProof.extension.values.contains(Constants.StorageIndexVarId)
+    }
+  }
+
   private[mempool] sealed trait InputAvailability
   private[mempool] case object Available extends InputAvailability
   private[mempool] final case class Missing(boxId: BoxId) extends InputAvailability

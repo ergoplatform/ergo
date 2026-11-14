@@ -12,10 +12,11 @@ import scorex.crypto.authds.{ADDigest, ADKey, ADValue, SerializedAdProof}
 import scorex.util.encode.Base16
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.{LDBFactory, LDBVersionedStore}
-import scorex.util.ByteArrayBuilder
+import scorex.util.{ByteArrayBuilder, ModifierId, bytesToId}
 import scorex.util.serialization.VLQByteBufferWriter
 import scorex.utils.{Random => RandomBytes}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -367,6 +368,41 @@ class VersionedLDBAVLStorageSpecification
     subtreeIds.foreach { sid =>
       val chunkBytes = store.get(sid).get
       SubtreeSerializer.parseBytesTry(chunkBytes).get.id.sameElements(sid) shouldBe true
+    }
+  }
+
+  property("iterate AVL tree") {
+    val prover = createPersistentProver()
+    val current = 11
+    val depth: Byte = 6
+    val manifestSerializer = new ManifestSerializer(depth)
+    blockchainWorkflowTest(prover)
+
+    val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
+    val dumpStore = LDBFactory.createKvDb(getRandomTempDir.getAbsolutePath)
+    val rootNodeLabel = storage.dumpSnapshot(dumpStore, depth, prover.digest.dropRight(1)).get
+    val manifest = manifestSerializer.parseBytesTry(dumpStore.get(rootNodeLabel).get).get
+    val expectedSubtrees = manifest.subtreesIds.drop(current).map { sid =>
+      val parsed = SubtreeSerializer.parseBytesTry(dumpStore.get(sid).get).get
+      bytesToId(parsed.id) -> parsed.leafValues
+    }
+
+    val chunkBuffer: ArrayBuffer[(ModifierId, Array[Array[Byte]])] = ArrayBuffer.empty[(ModifierId, Array[Array[Byte]])]
+
+    storage.iterateAVLTree(current, depth) { subtree =>
+      chunkBuffer += ((
+        bytesToId(subtree.id),
+        subtree.leafValues.toArray
+      ))
+    }
+
+    chunkBuffer.size shouldBe math.pow(2, depth).toInt - current
+    chunkBuffer.map(_._1) shouldBe expectedSubtrees.map(_._1)
+    chunkBuffer.zip(expectedSubtrees).foreach { case ((_, actualLeaves), (_, expectedLeaves)) =>
+      actualLeaves.length shouldBe expectedLeaves.length
+      actualLeaves.zip(expectedLeaves).foreach { case (a, e) =>
+        a.sameElements(e) shouldBe true
+      }
     }
   }
 

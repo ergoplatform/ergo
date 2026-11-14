@@ -232,6 +232,21 @@ trait ErgoWalletService {
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
 
   /**
+    * Scan boxes extracted from a UTXO set subtree
+    * @param state      - current wallet state
+    * @param boxes      - box array to scan
+    * @param subtreeId  - id of UTXO set subtree (used instead of blockId as version id)
+    * @param dustLimit  - boxes with value smaller than dustLimit are disregarded in wallet scan logic
+    * @param fullHeight - height to record in wallet digest (`0` while scan is in progress, state height on completion)
+    * @return new wallet state
+    */
+  def scanSnapshotChunk(state: ErgoWalletState,
+                        boxes: Array[ErgoBox],
+                        subtreeId: ModifierId,
+                        dustLimit: Option[Long],
+                        fullHeight: Int = 0): Try[ErgoWalletState]
+
+  /**
     * Sign a transaction
     */
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
@@ -632,6 +647,24 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
         state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
       }
+
+  override def scanSnapshotChunk(state: ErgoWalletState,
+                                 boxes: Array[ErgoBox],
+                                 subtreeId: ModifierId,
+                                 dustLimit: Option[Long],
+                                 fullHeight: Int = 0): Try[ErgoWalletState] =
+    WalletScanLogic.scanSnapshotBoxes(
+      state.registry,
+      state.offChainRegistry,
+      state.walletVars,
+      boxes,
+      subtreeId,
+      state.outputsFilter,
+      dustLimit,
+      ergoSettings.walletSettings.walletProfile,
+      fullHeight).map { case (reg, offReg, updatedOutputsFilter) =>
+      state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
+    }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

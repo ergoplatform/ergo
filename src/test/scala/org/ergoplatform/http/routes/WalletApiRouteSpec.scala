@@ -265,6 +265,19 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "reject a malformed derivation path with the parser's message" in {
+    Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/x/1".asJson)) ~> route ~> check {
+      rejection shouldEqual ValidationRejection("For input string: \"x\"", None)
+    }
+    Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "abc".asJson)) ~> route ~> check {
+      rejection shouldEqual ValidationRejection("Wrong path format", None)
+    }
+    Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "abc".asJson)) ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseEntity.asInstanceOf[akka.http.scaladsl.model.HttpEntity.Strict].data.utf8String shouldEqual "Wrong path format"
+    }
+  }
+
   it should "derive next key" in {
     Get(prefix + "/deriveNextKey") ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -349,6 +362,31 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
       response.size shouldBe walletTxs.size
       responseAs[Seq[AugWalletTransaction]] shouldEqual walletTxs
+    }
+  }
+
+  it should "return filtered wallet transactions" in {
+    val defaultScanIds = Set(WalletConstants.PaymentsScanId, WalletConstants.MiningScanId)
+    val matching = WalletActorStub.walletTxs.filter(_.wtx.scanIds.exists(defaultScanIds.contains))
+    val minHeight = matching.map(_.wtx.inclusionHeight).max
+    Get(prefix + s"/transactions?minInclusionHeight=$minHeight") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val expected = matching.filter(_.wtx.inclusionHeight >= minHeight)
+      expected should not be empty
+      responseAs[Seq[AugWalletTransaction]] shouldEqual expected
+    }
+  }
+
+  it should "return filtered wallet transactions by scanId" in {
+    val scanId = 1.shortValue()
+    val matching = WalletActorStub.walletTxs.filter(_.wtx.scanIds.contains(scanId))
+    val minHeight = matching.map(_.wtx.inclusionHeight).max
+    Get(prefix + s"/transactionsByScanId/$scanId?minInclusionHeight=$minHeight") ~> route ~> check {
+      import AugWalletTransaction._
+      status shouldBe StatusCodes.OK
+      val expected = matching.filter(_.wtx.inclusionHeight >= minHeight)
+      expected should not be empty
+      responseAs[Seq[AugWalletTransaction]] shouldEqual expected
     }
   }
 

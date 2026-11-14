@@ -58,6 +58,9 @@ object ErgoWalletActorMessages {
    */
   final case class Rollback(version: VersionTag)
 
+  /** Reset-only rollback; replies with Try[Unit] after the registry operation finishes. */
+  final case class RollbackForReset(version: VersionTag)
+
   /**
    * Generate new transaction fulfilling given requests
    *

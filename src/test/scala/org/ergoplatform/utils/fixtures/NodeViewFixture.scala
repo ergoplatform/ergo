@@ -7,9 +7,11 @@ import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.NodeViewTestContext
 import org.ergoplatform.wallet.utils.TestFileUtils
+import scorex.db.{LDBFactory, StoreRegistry}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
+import scala.util.Try
 
 /** This uses TestProbe to receive messages from actor.
   * To make TestProbe work `defaultSender` implicit should be imported
@@ -39,12 +41,14 @@ class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) exten
     * so a restart or a test can open the same directory.
     */
   def stopNodeViewHolder(): Unit = {
-    val holder  = nodeViewHolderRef
-    val watcher = new TestProbe(actorSystem)
-    watcher.watch(holder)
-    actorSystem.stop(holder)
-    watcher.expectTerminated(holder, 30.seconds)
-    actorSystem.stop(watcher.ref)
+    if (!actorSystem.whenTerminated.isCompleted) {
+      val holder  = nodeViewHolderRef
+      val watcher = new TestProbe(actorSystem)
+      watcher.watch(holder)
+      actorSystem.stop(holder)
+      watcher.expectTerminated(holder, 30.seconds)
+      actorSystem.stop(watcher.ref)
+    }
   }
 
   /** Restarts nodeViewHolder and applies config override */
@@ -58,7 +62,19 @@ class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) exten
     try stopNodeViewHolder()
     finally {
       actorSystem.stop(testProbe.testActor)
-      actorSystem.terminate()
+      Await.result(actorSystem.terminate(), 30.seconds)
+      // Wallet stores are not closed by actor shutdown. Release only this fixture's
+      // stores after all actors have terminated; other suites may still be running.
+      val registry = LDBFactory.factory.asInstanceOf[StoreRegistry]
+      registry.lock.writeLock().lock()
+      try {
+        val owned = registry.map.toVector.collect {
+          case (path, store) if path.toPath.toAbsolutePath.normalize()
+            .startsWith(nodeViewDir.toPath.toAbsolutePath.normalize()) => store
+        }
+        val closed = owned.map(store => Try(store.close()))
+        closed.foreach(_.get)
+      } finally registry.lock.writeLock().unlock()
     }
 }
 

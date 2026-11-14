@@ -79,7 +79,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   private val derivationPath: Directive1[DerivationPath] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("derivationPath").as[String]
-      .fold(_ => reject, s => DerivationPath.fromEncoded(s).fold(_ => reject, provide))
+      .fold(_ => reject, s => DerivationPath.fromEncoded(s).fold(e => reject(ValidationRejection(e.getMessage)), provide))
   }
 
   private val restoreRequest: Directive1[(Boolean, String, String, Option[String])] = entity(as[Json]).flatMap { p =>

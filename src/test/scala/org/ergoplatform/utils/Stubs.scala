@@ -213,6 +213,20 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       case GetTransactions =>
         sender() ! WalletTransactionsResponse(walletTxs)
 
+      case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed) =>
+        val base = if (includeUnconfirmed) {
+          scanIds.flatMap(id => walletTxsForScan(id, includeUnconfirmed = true))
+        } else {
+          walletTxs.filter(_.wtx.scanIds.exists(scanIds.contains))
+        }
+        val filtered = base.filter { awtx =>
+          awtx.wtx.inclusionHeight >= minHeight &&
+            awtx.wtx.inclusionHeight <= maxHeight &&
+            awtx.numConfirmations >= minConfNum &&
+            awtx.numConfirmations <= maxConfNum
+        }
+        sender() ! WalletTransactionsResponse(filtered)
+
       case DeriveKey(_) => sender() ! DeriveKeyResponse(Success(WalletActorStub.address))
 
       case DeriveNextKey => sender() !
@@ -317,7 +331,9 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       )
     )
     val walletTxs: Seq[AugWalletTransaction] =
-      Gen.listOf(augWalletTransactionGen).sample.get
+      Gen.listOf(augWalletTransactionGen).sample.get ++
+        Iterator.continually(Gen.listOfN(2, augWalletTransactionForScanGen(PaymentsScanId, includeUnconfirmed = false)).sample).flatten.next() ++
+        Iterator.continually(Gen.listOfN(2, augWalletTransactionForScanGen(ScanId @@ 1.toShort, includeUnconfirmed = false)).sample).flatten.next()
 
     def walletTxsForScan(scanId: ScanId, includeUnconfirmed: Boolean = false): Seq[AugWalletTransaction] =
       Gen.listOf(augWalletTransactionForScanGen(scanId, includeUnconfirmed)).sample.get

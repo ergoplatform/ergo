@@ -53,14 +53,37 @@ case class IndexedErgoTransaction(txid: ModifierId,
     * @return this transaction augmented with additional information
     */
   def retrieveBody(history: ErgoHistoryReader): IndexedErgoTransaction = {
+    val all = IndexedErgoTransaction.allBoxes(history)
+    fill(history, all, all)
+  }
+
+  /**
+    * Like [[retrieveBody]], with the inputs and outputs that `inputBoxes` and `outputBoxes` read
+    * from the box numbers, for instance only some of them. The body is put on a copy of this
+    * transaction and this one is left as it is: transactions read from the database are shared
+    * through its cache, so a body other than the full one must not be put on them.
+    *
+    * @param history     - database handle
+    * @param inputBoxes  - reads the inputs to list from the numbers of all inputs
+    * @param outputBoxes - reads the outputs to list from the numbers of all outputs
+    * @return a copy of this transaction with the information added
+    */
+  def retrieveBody(history: ErgoHistoryReader,
+                   inputBoxes: Array[Long] => IndexedSeq[IndexedErgoBox],
+                   outputBoxes: Array[Long] => IndexedSeq[IndexedErgoBox]): IndexedErgoTransaction =
+    copy().fill(history, inputBoxes, outputBoxes)
+
+  private def fill(history: ErgoHistoryReader,
+                   inputBoxes: Array[Long] => IndexedSeq[IndexedErgoBox],
+                   outputBoxes: Array[Long] => IndexedSeq[IndexedErgoBox]): IndexedErgoTransaction = {
 
     val header: Header = history.typedModifierById[Header](blockId).filter(_.height == height).get
 
     _inclusionHeight = height
     _timestamp = header.timestamp
     _numConfirmations = history.fullBlockHeight - height
-    _inputs = inputNums.flatMap(NumericBoxIndex.getBoxByNumber(history, _))
-    _outputs = outputNums.flatMap(NumericBoxIndex.getBoxByNumber(history, _))
+    _inputs = inputBoxes(inputNums)
+    _outputs = outputBoxes(outputNums)
 
     this
   }
@@ -107,6 +130,14 @@ object IndexedErgoTransactionSerializer extends ErgoSerializer[IndexedErgoTransa
 
 object IndexedErgoTransaction {
   val extraIndexTypeId: ExtraIndexTypeId = 10.toByte
+
+  /**
+    * Reads every box of the given numbers that is in the database.
+    * @param history - database handle
+    * @return function from box numbers to the boxes
+    */
+  def allBoxes(history: ErgoHistoryReader): Array[Long] => IndexedSeq[IndexedErgoBox] =
+    nums => nums.flatMap(NumericBoxIndex.getBoxByNumber(history, _))
 
   def fromTx(tx: ErgoTransaction,
              index: Int,

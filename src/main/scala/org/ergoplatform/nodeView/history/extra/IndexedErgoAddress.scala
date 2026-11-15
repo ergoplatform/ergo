@@ -102,6 +102,71 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   override private[extra] def filterMempool(boxes: Seq[ErgoBox]): Seq[ErgoBox] =
     boxes.filter(box => hashErgoTree(box.ergoTree) == treeHash)
 
+  /**
+    * Get a range of the transactions of this address, like [[retrieveTxs]], each listing among its
+    * inputs, its outputs or both only the boxes of this address: those whose ErgoTree is the tree
+    * of this address, the boxes the indexer associates with it.
+    *
+    * The boxes of other addresses are mostly not read, see [[ownBoxes]].
+    *
+    * The bodies are put on copies of the transactions, see [[IndexedErgoTransaction.retrieveBody]].
+    *
+    * @param history         - history to use
+    * @param offset          - items to skip from the start
+    * @param limit           - items to retrieve
+    * @param relevantInputs  - whether to list only the inputs of this address
+    * @param relevantOutputs - whether to list only the outputs of this address
+    * @return array of transactions with (filtered) bodies
+    */
+  def retrieveTxs(history: ErgoHistoryReader,
+                  offset: Int,
+                  limit: Int,
+                  relevantInputs: Boolean,
+                  relevantOutputs: Boolean)(implicit segmentTreshold: Int): Array[IndexedErgoTransaction] =
+    if (!relevantInputs && !relevantOutputs) {
+      retrieveTxs(history, offset, limit)
+    } else {
+      val own = ownBoxes(history)
+      lazy val all = IndexedErgoTransaction.allBoxes(history)
+      val inputBoxes = if (relevantInputs) own else all
+      val outputBoxes = if (relevantOutputs) own else all
+      getFromSegments(history, offset, limit, txSegmentCount, txs, SegmentSerializer.txSegmentId, _.txs,
+        (nums: ArrayBuffer[Long], h: ErgoHistoryReader) =>
+          nums.map(n => NumericTxIndex.getTxByNumber(h, n).get.retrieveBody(h, inputBoxes, outputBoxes)).toArray)
+    }
+
+  /**
+    * Reads the boxes of this address among given box numbers, see [[retrieveTxs]] with filters.
+    *
+    * Whether a box number is one of this address is looked up in the box numbers this address
+    * lists ([[boxLookup]]); only the boxes it finds are read, and kept if their tree is the tree of
+    * this address. A number the lookup cannot place, because a segment cannot be read, is read and
+    * kept by its tree as well.
+    *
+    * The lookup needs this object to be unchanged while it is used, and its box numbers to cover
+    * its transaction numbers. Both hold for a row read from the database: address rows are segments,
+    * which the database cache does not keep (`HistoryStorage.getExtraIndex`), so every read parses
+    * the row as the indexer last saved it, in one batch with its segments, and nobody else has it.
+    *
+    * @param history - database handle
+    * @return function from box numbers to the boxes of this address among them
+    */
+  private[extra] def ownBoxes(history: ErgoHistoryReader): Array[Long] => IndexedSeq[IndexedErgoBox] = {
+    val listed = boxLookup(history)
+    nums => nums.flatMap { n =>
+      val lookup = listed(n)
+      if (lookup.contains(false)) {
+        None
+      } else {
+        NumericBoxIndex.getBoxByNumber(history, n).filter { iEb =>
+          val own = hashErgoTree(iEb.box.ergoTree) == treeHash
+          if (!own && lookup.isDefined) log.debug(s"Address $treeHash lists box $n of another tree")
+          own
+        }
+      }
+    }
+  }
+
 }
 
 object IndexedErgoAddressSerializer extends ErgoSerializer[IndexedErgoAddress] {

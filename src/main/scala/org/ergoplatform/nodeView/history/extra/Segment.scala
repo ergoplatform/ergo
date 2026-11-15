@@ -98,6 +98,56 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
   }
 
   /**
+   * Read-only lookup of the box numbers this object lists, which tells whether a box number is
+   * listed without reading the box. The numbers are listed in ascending order of their absolute
+   * value (negative ones are spent boxes): first in the box segments, by segment number, then in
+   * `boxes`. A number below the first one in `boxes` is searched for in the segments by binary
+   * search. Segments read are kept in the returned lookup, so checking many numbers reads every
+   * segment at most once; a parent without box segments reads nothing.
+   *
+   * Nothing is modified, neither this object nor its `buffer`. This object must not be changed
+   * while the lookup is used, as a segment read from the database is not: the database cache does
+   * not keep segments, so every read parses one for the caller only.
+   *
+   * @param history - database to read segments from
+   * @return function from a box number (its sign is ignored) to whether this object lists it, or
+   *         None if a segment needed to tell cannot be read or is empty
+   */
+  private[extra] def boxLookup(history: ErgoHistoryReader): Long => Option[Boolean] = {
+    val inParent: ArrayBuffer[Long] = boxes
+    val segmentCount: Int = boxSegmentCount
+    val segments: mutable.HashMap[Int, Option[ArrayBuffer[Long]]] = mutable.HashMap.empty
+    def segment(n: Int): Option[ArrayBuffer[Long]] =
+      segments.getOrElseUpdate(n,
+        history.typedExtraIndexById[T](factory(boxSegmentId(id, n)).id).map(_.boxes).filter(_.nonEmpty))
+
+    boxNum => {
+      val key: Long = abs(boxNum)
+      if (inParent.nonEmpty && key >= abs(inParent.head)) {
+        Some(binarySearch(inParent, key) >= 0)
+      } else {
+        var result: Option[Boolean] = Some(false)
+        var low = 0
+        var high = segmentCount - 1
+        while (low <= high) {
+          val mid = (low + high) >>> 1
+          segment(mid) match {
+            case Some(s) if key < abs(s.head) => high = mid - 1
+            case Some(s) if key > abs(s.last) => low = mid + 1
+            case Some(s) =>
+              result = Some(binarySearch(s, key) >= 0)
+              low = high + 1 // found the segment
+            case None =>
+              result = None
+              low = high + 1 // cannot tell
+          }
+        }
+        result
+      }
+    }
+  }
+
+  /**
    * Create an array of parent objects each containing [[ExtraIndexerBase.segmentThreshold]] number of transaction/box indexes.
    * These objects have their ids calculated by "txSegmentId" and "boxSegmentId" respectively.
    *

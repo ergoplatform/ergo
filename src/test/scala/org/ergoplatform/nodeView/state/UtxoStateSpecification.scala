@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.transaction.TooHighCostError
-import org.ergoplatform.core.idToVersion
+import org.ergoplatform.core.{idToVersion, versionToBytes}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants.FalseTree
@@ -623,6 +623,26 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       .get
 
     ErgoNodeViewHolder.extractFailedTxId(error) shouldBe Some(invalidTx.id)
+  }
+
+  property("rollbackTo() fails when target version was pruned past keepVersions") {
+    val keepOneSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(keepVersions = 1)
+    )
+    val (us, bh) = createUtxoState(keepOneSettings)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, keepOneSettings).applyModifier(genesis)(_ => ()).get
+    val block1 = validFullBlock(Some(genesis), wusAfterGenesis)
+    val wusAfterBlock1 = wusAfterGenesis.applyModifier(block1)(_ => ()).get
+    val block2 = validFullBlock(Some(block1), wusAfterBlock1)
+    val stateAfterBlock2 = wusAfterBlock1.applyModifier(block2)(_ => ()).get
+    val genesisVersion = idToVersion(genesis.id)
+
+    stateAfterBlock2.rollbackVersions.toSeq should not contain genesisVersion
+    stateAfterBlock2.store.get(versionToBytes(genesisVersion)) shouldBe defined
+    stateAfterBlock2.rollbackTo(genesisVersion) shouldBe 'failure
+    stateAfterBlock2.rootDigest shouldEqual block2.header.stateRoot
+    us.closeStorage()
   }
 
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {

@@ -89,8 +89,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     * if pool is overflown. We should first add transaction and only after it find candidate for replacement
     * because new transaction may affect weights of existed transaction in mempool (see updateFamily).
     * So candidate for replacement (transaction with minimal weight) can be changed after adding new transaction.
-    * put() is preceded by canAccept method which enforces that newly added transaction will not be immediately
-    * thrown from the pool.
+    * An admission precheck may use the old weights; updateFamily can then make the
+    * incoming transaction the lowest-weight victim. The caller must check that it remains.
     *
     * @param unconfirmedTx - transaction to add
     * @return - modified pool

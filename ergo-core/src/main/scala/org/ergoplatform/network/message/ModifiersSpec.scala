@@ -21,6 +21,14 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
 
   private val HeaderLength = 5 // msg type Id + modifiersCount
 
+  /**
+    * Whether `serialize` writes a message holding one modifier of `modifierLength` bytes.
+    * If not, it would write a message with 0 modifiers, so the modifier must not be sent.
+    * Uses the same size estimate and limit as `serialize`.
+    */
+  def singleModifierFits(modifierLength: Int): Boolean =
+    HeaderLength.toLong + ErgoNodeViewModifier.ModifierIdSize + 4 + modifierLength <= maxMsgSizeWithReserve
+
   override def serialize(data: ModifiersData, w: Writer): Unit = {
 
     val typeId = data.typeId
@@ -50,7 +58,9 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
   override def parse(r: Reader): ModifiersData = {
     val typeId = NetworkObjectTypeId.fromByte(r.getByte()) // 1 byte
     val count = r.getUInt().toIntExact // 8 bytes
-    require(count > 0, s"Illegal message with 0 modifiers of type $typeId")
+    // A node serializes a modifier that doesn't fit its size limit as a message with 0 modifiers.
+    // Parse it as empty: the requester treats it as non-delivery rather than as a malformed message,
+    // which would get an honest peer permanently banned.
     val resMap = immutable.Map.newBuilder[ModifierId, Array[Byte]]
     (0 until count).foldLeft(HeaderLength) { case (msgSize, _) =>
       val id = bytesToId(r.getBytes(ErgoNodeViewModifier.ModifierIdSize))

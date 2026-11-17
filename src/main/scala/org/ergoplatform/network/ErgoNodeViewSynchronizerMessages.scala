@@ -2,7 +2,7 @@ package org.ergoplatform.network
 
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
-import org.ergoplatform.modifiers.NetworkObjectTypeId
+import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.nodeView.history._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
@@ -135,9 +135,10 @@ object ErgoNodeViewSynchronizerMessages {
       * the block is applied by NodeViewHolder. This allows fast propagation
       * of newly mined blocks to peers.
       *
-      * @param header - header of the newly mined block
+      * @param header   - header of the newly mined block
+      * @param sections - its block sections, so the node can serve them to peers before it has applied the block
       */
-    case class NewBlockMined(header: Header) extends NodeViewHolderEvent
+    case class NewBlockMined(header: Header, sections: Seq[BlockSection]) extends NodeViewHolderEvent
 
     /**
       * Signal sent after block sections processing (validation and application to state) done

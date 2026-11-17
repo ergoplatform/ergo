@@ -19,9 +19,11 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
 
   val nodesQty: Int = 4
 
-  // sync v2 sends headers at offsets 0, 16, 128, 512 from the tip, so the common chain
-  // must be long enough for the header 16 below a forked tip to exist and be common
-  val commonChainLength: Int = 16
+  // sync v2 finds a common point only through the headers 0, 16, 128 and 512 blocks
+  // below a node's tip (`ErgoHistoryReader.FullV2SyncOffsets`). An isolated follower can
+  // mine 20 blocks or more, past the 16 offset, so the common chain is at least 129
+  // blocks long: then the header 128 below a forked tip exists and is common
+  val commonChainLength: Int = 129
   val forkLength: Int = 5
   val syncLength: Int = 15
 
@@ -40,6 +42,11 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
     .map(_.withFallback(allowLocalConfig).withFallback(miningTimingConfig))
 
   val minerConfig: Config = nodeConfigs.head
+
+  // node01 mines the common chain alone, so it can poll fast, as in LongChainSyncSpec
+  val commonChainMinerConfig: Config =
+    internalMinerPollingIntervalConfig(100).withFallback(minerConfig)
+
   val onlineSyncNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)
     .map(_.withFallback(nonGeneratingPeerConfig))
   val offlineMiningNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)
@@ -67,9 +74,10 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
   }
 
   // Testing scenario:
-  // 1. Start up {nodesQty} nodes and let them mine common chain of length {initialCommonChainLength};
+  // 1. Start up {nodesQty} nodes and let node01 mine a common chain of
+  //    {commonChainLength} blocks;
   // 2. Stop all nodes (a clean shutdown) when they are done, make them offline generating,
-  //    clear known peers and restart them;
+  //    clear their peer databases and restart them with no connections allowed;
   // 3. Let them mine offline until each has its own block {forkLength} above the followers'
   //    headers, so that every follower has a fork;
   // 4. Stop all nodes again and restart with `knownPeers` filled, wait another {syncLength} blocks;
@@ -79,7 +87,8 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
     log.info(minerConfig.toString)
     onlineSyncNodesConfig.foreach(x => log.info(x.toString))
 
-    val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineSyncNodesConfig)
+    val nodes: List[Node] =
+      startNodesWithBinds(commonChainMinerConfig +: onlineSyncNodesConfig)
 
     val result = Async.async {
       val initMaxHeight = Async.await(Future.traverse(nodes)(_.fullHeight).map(_.max))
@@ -102,9 +111,13 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       val isolatedNodes = Async.await {
         nodes.foreach(node => docker.stopNode(node.containerId))
         clearPeerDatabases()
-        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
+        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, noConnectionsConfig))
       }
       Async.await(Future.traverse(isolatedNodes)(_.waitForHeight(forkHeight, 100.millis)))
+      val isolatedPeers = Async.await(Future.traverse(isolatedNodes) { node =>
+        node.connectedPeers.map(peers => node.nodeName -> peers.map(_.name))
+      })
+      isolatedPeers.filter(_._2.nonEmpty) shouldBe empty
       // no follower has node01's block at forkHeight, so every follower has a fork to resolve
       val isolatedIds =
         Async.await(Future.traverse(isolatedNodes)(_.headerIdsByHeight(forkHeight).map(_.headOption)))

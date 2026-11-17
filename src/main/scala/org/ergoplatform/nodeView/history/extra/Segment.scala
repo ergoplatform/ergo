@@ -294,7 +294,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
 
     // filter tx numbers
     do {
-      val tmp = txs.takeWhile(_ <= txTarget)
+      val tmp = txs.filter(_ <= txTarget)
       txs.clear()
       txs ++= tmp
       if (txs.isEmpty && txSegmentCount > 0) { // entire current tx set removed, retrieving more from database if possible

@@ -1,11 +1,13 @@
 package scorex.core.network
 
+import akka.actor.ActorSystem
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
 import org.ergoplatform.network.message.{
   GetPeersSpec,
   Message,
+  MessageSerializer,
   MessageSpec,
   UtxoSnapshotChunkSpec
 }
@@ -20,11 +22,12 @@ import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, DurationInt}
 
 class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
-  private final class ConnectedHandler(val connection: TestProbe,
+  private final class ConnectedHandler(val system: ActorSystem,
+                                       val connection: TestProbe,
                                        val watcher: TestProbe,
                                        val handler: TestActorRef[PeerConnectionHandler])
 
-  private def withConnectedHandler(
+  private def withHandler(
     messageSpecs: Seq[MessageSpec[_]],
     localPort: Int
   )(test: ConnectedHandler => Unit): Unit = {
@@ -53,17 +56,75 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
       connection.expectMsg(Tcp.ResumeReading)
       connection.expectMsgType[Tcp.Write]
 
+      test(new ConnectedHandler(system, connection, controller, handler))
+    } finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
+
+  private def withConnectedHandler(
+    messageSpecs: Seq[MessageSpec[_]],
+    localPort: Int
+  )(test: ConnectedHandler => Unit): Unit =
+    withHandler(messageSpecs, localPort) { fixture =>
       val handshake = HandshakeSerializer.toBytes(
         Handshake(defaultPeerSpec, System.currentTimeMillis())
       )
-      connection.send(handler, Tcp.Received(ByteString(handshake)))
-      controller.expectMsgType[NetworkController.ReceivableMessages.Handshaked]
-      connection.expectMsg(Tcp.ResumeReading)
-      controller.watch(handler)
+      fixture.connection.send(fixture.handler, Tcp.Received(ByteString(handshake)))
+      fixture.watcher.expectMsgType[NetworkController.ReceivableMessages.Handshaked]
+      fixture.connection.expectMsg(Tcp.ResumeReading)
+      fixture.watcher.watch(fixture.handler)
 
-      test(new ConnectedHandler(connection, controller, handler))
-    } finally {
-      Await.result(fixture.system.terminate(), Duration.Inf)
+      test(fixture)
+    }
+
+  private def stopTransport(fixture: ConnectedHandler): Unit = {
+    val transportWatcher = TestProbe()(fixture.system)
+    transportWatcher.watch(fixture.connection.ref)
+    fixture.watcher.watch(fixture.handler)
+    fixture.system.stop(fixture.connection.ref)
+    transportWatcher.expectTerminated(fixture.connection.ref)
+    fixture.watcher.expectTerminated(fixture.handler)
+  }
+
+  property("transport lifecycle stops the handler on normal peer closure") {
+    withConnectedHandler(Seq.empty, localPort = 9193) { fixture =>
+      fixture.connection.send(fixture.handler, Tcp.PeerClosed)
+      fixture.watcher.expectTerminated(fixture.handler)
+    }
+  }
+
+  property("transport lifecycle stops the handler before a handshake") {
+    withHandler(Seq.empty, localPort = 9203)(stopTransport)
+  }
+
+  property("transport lifecycle stops the handler after an accepted handshake") {
+    withConnectedHandler(Seq.empty, localPort = 9213)(stopTransport)
+  }
+
+  property("transport lifecycle stops the handler while buffering a failed write") {
+    withConnectedHandler(Seq(GetPeersSpec), localPort = 9223) { fixture =>
+      fixture.handler ! Message(GetPeersSpec, Right(()), None)
+      val failedWrite = fixture.connection.expectMsgType[Tcp.Write]
+      fixture.connection.send(fixture.handler, Tcp.CommandFailed(failedWrite))
+      fixture.connection.expectMsg(Tcp.ResumeWriting)
+
+      stopTransport(fixture)
+    }
+  }
+
+  property("transport lifecycle stops the handler while closing an oversized handshake") {
+    withHandler(Seq.empty, localPort = 9233) { fixture =>
+      val header = ByteString(
+        Array[Byte](0, 1, 'a'.toByte, 4, 0, 100, 0, 0, 1, 127, 0xa0.toByte, 0x3f)
+      )
+      val incompleteHandshake = header ++ ByteString(
+        Array.fill[Byte](HandshakeSerializer.maxHandshakeSize - header.length)(0)
+      )
+      fixture.connection.send(fixture.handler, Tcp.Received(incompleteHandshake))
+      fixture.connection.expectMsg(Tcp.Abort)
+
+      stopTransport(fixture)
     }
   }
 
@@ -162,6 +223,118 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
 
       val nextWrite = fixture.connection.expectMsgType[Tcp.Write]
       nextWrite.ack shouldEqual PeerConnectionHandler.ReceivableMessages.Ack(2)
+    }
+  }
+
+  property("deliver a whole message received in the same TCP read as the handshake") {
+    val specs: Seq[MessageSpec[_]] = Seq(GetPeersSpec)
+    withHandler(specs, localPort = 9113) { fixture =>
+      val serializer = new MessageSerializer(specs, settings.scorexSettings.network.magicBytes)
+      val handshakeBytes = ByteString(HandshakeSerializer.toBytes(Handshake(defaultPeerSpec, System.currentTimeMillis())))
+      val messageBytes = serializer.serialize(Message(GetPeersSpec, Right(()), None))
+      fixture.connection.send(fixture.handler, Tcp.Received(handshakeBytes ++ messageBytes))
+
+      fixture.watcher.expectMsgType[NetworkController.ReceivableMessages.Handshaked]
+      val delivered = fixture.watcher.expectMsgType[Message[_]]
+      delivered.spec shouldEqual GetPeersSpec
+      delivered.source shouldBe defined
+      fixture.connection.expectMsg(Tcp.ResumeReading)
+    }
+  }
+
+  property("reassemble a message split across the handshake TCP read and the next TCP read") {
+    val specs: Seq[MessageSpec[_]] = Seq(UtxoSnapshotChunkSpec)
+    val serializer = new MessageSerializer(specs, settings.scorexSettings.network.magicBytes)
+    val handshakeBytes = ByteString(HandshakeSerializer.toBytes(Handshake(defaultPeerSpec, System.currentTimeMillis())))
+    val body = Array[Byte](1, 2, 3, 4, 5, 6, 7, 8)
+    val messageBytes = serializer.serialize(Message(UtxoSnapshotChunkSpec, Right(body), None))
+
+    (1 until messageBytes.length).foreach { cut =>
+      withHandler(specs, localPort = 9120 + cut * 2) { fixture =>
+        val (head, tail) = messageBytes.splitAt(cut)
+        fixture.connection.send(fixture.handler, Tcp.Received(handshakeBytes ++ head))
+        fixture.watcher.expectMsgType[NetworkController.ReceivableMessages.Handshaked]
+        fixture.connection.expectMsg(Tcp.ResumeReading)
+
+        fixture.connection.send(fixture.handler, Tcp.Received(tail))
+        val delivered = fixture.watcher.expectMsgType[Message[_]]
+        delivered.spec shouldEqual UtxoSnapshotChunkSpec
+        delivered.source shouldBe defined
+        fixture.connection.expectMsg(Tcp.ResumeReading)
+        fixture.watcher.expectNoMessage(25.millis)
+      }
+    }
+  }
+
+  property("accept a valid handshake split across TCP chunks") {
+    withHandler(Seq.empty, localPort = 9053) { fixture =>
+      val bytes =
+        HandshakeSerializer.toBytes(Handshake(defaultPeerSpec, System.currentTimeMillis()))
+      val splitAt = bytes.length / 2
+
+      fixture.connection.send(fixture.handler, Tcp.Received(ByteString(bytes.take(splitAt))))
+      fixture.connection.expectMsg(Tcp.ResumeReading)
+      fixture.connection.send(fixture.handler, Tcp.Received(ByteString(bytes.drop(splitAt))))
+
+      fixture.watcher.expectMsgType[NetworkController.ReceivableMessages.Handshaked](2.seconds)
+      fixture.connection.expectMsg(Tcp.ResumeReading)
+    }
+  }
+
+  property("preserve a framed message coalesced with a handshake carrying peer features") {
+    val specs: Seq[MessageSpec[_]] = Seq(GetPeersSpec)
+    withHandler(specs, localPort = 9063) { fixture =>
+      val baseHandshake =
+        HandshakeSerializer.toBytes(Handshake(defaultPeerSpec, System.currentTimeMillis()))
+      val handshake = ByteString(baseHandshake.dropRight(1)) ++
+        ByteString(Array[Byte](1, 127, 3, 1, 2, 3))
+      val framedMessage =
+        new MessageSerializer(specs, settings.scorexSettings.network.magicBytes)
+          .serialize(Message(GetPeersSpec, Right(()), None))
+
+      fixture.connection.send(fixture.handler, Tcp.Received(handshake ++ framedMessage))
+
+      fixture.watcher.expectMsgType[NetworkController.ReceivableMessages.Handshaked](2.seconds)
+      val received = fixture.watcher.expectMsgType[Message[_]](2.seconds)
+      received.spec shouldBe GetPeersSpec
+      fixture.watcher.expectNoMessage(200.millis)
+    }
+  }
+
+  property("apply the handshake size limit only to the handshake prefix") {
+    val specs: Seq[MessageSpec[_]] = Seq(UtxoSnapshotChunkSpec)
+    withHandler(specs, localPort = 9073) { fixture =>
+      val handshake =
+        HandshakeSerializer.toBytes(Handshake(defaultPeerSpec, System.currentTimeMillis()))
+      val framedMessage = new MessageSerializer(specs, settings.scorexSettings.network.magicBytes)
+        .serialize(Message(UtxoSnapshotChunkSpec, Right(Array.fill[Byte](9000)(1)), None))
+
+      (handshake.length + framedMessage.length) should be > HandshakeSerializer.maxHandshakeSize
+      fixture.connection.send(fixture.handler, Tcp.Received(ByteString(handshake) ++ framedMessage))
+
+      fixture.watcher.expectMsgType[NetworkController.ReceivableMessages.Handshaked](2.seconds)
+      val received = fixture.watcher.expectMsgType[Message[_]](2.seconds)
+      received.spec shouldBe UtxoSnapshotChunkSpec
+    }
+  }
+
+  property("close when an incomplete handshake reaches the size limit") {
+    withHandler(Seq.empty, localPort = 9183) { fixture =>
+      val header = ByteString(
+        Array[Byte](0, 1, 'a'.toByte, 4, 0, 100, 0, 0, 1, 127, 0xa0.toByte, 0x3f)
+      )
+      val incompleteHandshake =
+        header ++ ByteString(
+          Array.fill[Byte](HandshakeSerializer.maxHandshakeSize - header.length)(0)
+        )
+
+      fixture.connection.send(fixture.handler, Tcp.Received(incompleteHandshake))
+      val validHandshake =
+        HandshakeSerializer.toBytes(Handshake(defaultPeerSpec, System.currentTimeMillis()))
+      fixture.connection.send(fixture.handler, Tcp.Received(ByteString(validHandshake)))
+
+      fixture.connection.expectMsg(Tcp.Abort)
+      fixture.watcher.expectNoMessage(200.millis)
     }
   }
 }

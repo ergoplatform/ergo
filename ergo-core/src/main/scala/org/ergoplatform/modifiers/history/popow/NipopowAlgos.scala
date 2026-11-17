@@ -78,40 +78,41 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
   def hasValidPow(header: Header): Boolean = powScheme.validate(header).isSuccess
 
   /**
-    * Computes best score of a given chain.
-    * The score value depends on number of µ-superblocks in the given chain.
+    * Work shown by a chain of headers, used to compare two proofs.
     *
-    * see [KMZ17], Algorithm 4
+    * A header is under threshold `nu` when `hit * 2^nu <= q`, where `hit` is its PoW hit and `q` the order of
+    * the group. Finding such a header takes `2^nu` hash computations on average, whatever difficulty the
+    * header declares, and a header which is valid for a difficulty of at least `2^nu` is always under it. So
+    * `2^nu` times the number of headers under `nu` estimates the work behind them, every header counting once.
     *
-    * [KMZ17]:
-    * "To find the best argument of a proof π given b, best-arg_m collects all the μ
-    * indices which point to superblock levels that contain valid arguments after block b.
-    * Argument validity requires that there are at least m μ-superblocks following block b,
-    * which is captured by the comparison|π↑μ{b:}|≥m. 0 is always considered a valid level,
-    * regardless of how many blocks are present there. These level indices are collected into set M.
-    * For each of these levels, the score of their respective argument is evaluated by weighting the
-    * number of blocks by the level as 2μ|π↑μ{b:}|. The highest possible score across all levels is returned."
+    * The score is the largest such value over the thresholds which have at least `m` headers under them, and
+    * zero if no threshold has `m`. A count of superblocks ([KMZ17], Algorithm 4) measures the level of a header
+    * against the difficulty the header declares itself, which is sound for a constant difficulty only: for the
+    * same hit the level is higher the lower the declared difficulty.
     *
-    * function best-arg_m(π, b)
-    * M←{μ:|π↑μ{b:}|≥m}∪{0}
-    * return max_{μ∈M} {2μ·|π↑μ{b:}|}
-    * end function
+    * Integer arithmetic only. The genesis header is not counted.
     */
-  def bestArg(chain: Seq[Header])(m: Int): Int = {
+  def bestArg(chain: Seq[Header])(m: Int): BigInt = {
     require(m >= 1, s"$m < 1")
-
-    @scala.annotation.tailrec
-    def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] =
-      if (level == 0) {
-        loop(level + 1, (0, chain.size) +: acc) // Supposing each header is at least of level 0.
-      } else {
-        val args = chain.filter(maxLevelOf(_) >= level)
-        if (args.lengthCompare(m) >= 0) loop(level + 1, (level, args.size) +: acc) else acc
+    val thresholds = chain.filterNot(_.isGenesis).map(thresholdOf)
+    if (thresholds.isEmpty) {
+      BigInt(0)
+    } else {
+      (thresholds.min to thresholds.max).foldLeft(BigInt(0)) { (best, nu) =>
+        val under = thresholds.count(_ >= nu)
+        if (under >= m) best.max(BigInt(under) << nu) else best
       }
+    }
+  }
 
-    loop(level = 0).map { case (lvl, size) =>
-      math.pow(2, lvl.toDouble) * size // 2^µ * |C↑µ|
-    }.max.toInt
+  /**
+    * The highest threshold the header is under: the largest `nu` such that `hit * 2^nu <= q`, and 0 for a hit
+    * which is not below `q / 2`.
+    */
+  private[popow] def thresholdOf(header: Header): Int = {
+    val hit = powScheme.powHit(header)
+    val nu = org.ergoplatform.mining.q.bitLength - hit.bitLength
+    if (nu <= 0) 0 else if ((hit << nu) <= org.ergoplatform.mining.q) nu else nu - 1
   }
 
   /**

@@ -40,7 +40,7 @@ import sigma.VersionContext
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
 
@@ -196,6 +196,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    */
   //todo: clear after bootstrapping
   private val nipopowProviders = mutable.Set[ConnectedPeer]()
+
+  // NiPoPoW proof of the chain up to the current best header, for peers which ask for one. Built at most once
+  // per 10 blocks (20 minutes with a 2 minutes block interval), see NipopowTipProofCache.
+  private val nipopowTipProofCache = new NipopowTipProofCache(maxAgeBlocks = 10)
+
+  // peers to answer when the build of that proof which is under way has ended
+  private val nipopowTipProofWaiters = mutable.Set[ConnectedPeer]()
+
+  // more peers than this are not kept waiting for one build; the rest get the stored proof at once
+  private val MaxNipopowTipProofWaiters = 64
 
   /**
     * How many peers should have a utxo set snapshot to start downloading it
@@ -1146,21 +1156,119 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private def sendNipopowProofBytes(proofBytes: Array[Byte], peer: ConnectedPeer): Unit = {
+    val msg = Message(NipopowProofSpec, Right(proofBytes), None)
+    networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+  }
+
+  /**
+    * Send the NiPoPoW proof stored for the last UTXO set snapshot to a peer
+    */
+  private def sendStoredNipopowProof(hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    hr.readPopowProofBytesFromDb() match {
+      case Some(proofBytes) =>
+        sendNipopowProofBytes(proofBytes, peer)
+      case None =>
+        log.warn(s"No stored nipopow proof to send to $peer")
+    }
+  }
+
+  /**
+    * Answer a peer which asked for a NiPoPoW proof of the chain up to the current best header: with the kept
+    * proof if there is a recent one, otherwise when a new one has been built. The build is done out of this
+    * actor, as it reads a header and an extension from the database for every header of the proof. If the
+    * proof can not be built, the peer gets the stored proof.
+    */
+  private def sendNipopowTipProof(hr: ErgoHistory, peer: ConnectedPeer): Unit = {
+    hr.bestHeaderOpt match {
+      case Some(best) =>
+        val onBestChain: (ModifierId, Int) => Boolean = (id, height) => hr.bestHeaderIdAtHeight(height).contains(id)
+        nipopowTipProofCache.request(best.id, best.height, onBestChain) match {
+          case NipopowTipProofCache.Serve(proofBytes) =>
+            sendNipopowProofBytes(proofBytes, peer)
+          case NipopowTipProofCache.Unavailable =>
+            sendStoredNipopowProof(hr, peer)
+          case NipopowTipProofCache.Wait if nipopowTipProofWaiters.size < MaxNipopowTipProofWaiters =>
+            nipopowTipProofWaiters += peer
+          case NipopowTipProofCache.Wait =>
+            sendStoredNipopowProof(hr, peer)
+          case build: NipopowTipProofCache.Build =>
+            // peers which waited for a build which did not end stay in the set, and are answered by this one
+            if (nipopowTipProofWaiters.size < MaxNipopowTipProofWaiters) {
+              nipopowTipProofWaiters += peer
+            } else {
+              sendStoredNipopowProof(hr, peer)
+            }
+            val started = System.currentTimeMillis()
+            // the proof is of the best header when the build runs, which can be a later one than `best`: it is
+            // kept under the header it ends at, so that it is not served once that header has left the best chain
+            Future(hr.popowProof().map(p => (p.headersChain.last, hr.nipopowSerializer.toBytes(p)))).onComplete { res =>
+              val tookMs = System.currentTimeMillis() - started
+              res.toOption.flatMap(_.toOption) match {
+                case Some((tip, proofBytes)) =>
+                  self ! NipopowTipProofBuilt(build, tip.id, tip.height, Some(proofBytes), tookMs)
+                case None =>
+                  self ! NipopowTipProofBuilt(build, build.headerId, build.height, None, tookMs)
+              }
+            }
+        }
+      case None =>
+        sendStoredNipopowProof(hr, peer)
+    }
+  }
+
+  /**
+    * Keep the NiPoPoW proof built for the current tip (or that it could not be built), and answer the peers
+    * which waited for it
+    */
+  private def nipopowTipProofBuilt(built: NipopowTipProofBuilt, hr: ErgoHistory): Unit = {
+    if (!nipopowTipProofCache.built(built.build, built.headerId, built.height, built.proofBytesOpt)) {
+      // another build was started since this one: the peers which wait are answered when that one has ended
+      log.info(s"Nipopow proof build started @ ${built.build.height} ended after ${built.tookMs} ms, " +
+        s"when another was under way: its result is not used")
+    } else {
+      answerNipopowTipProofWaiters(built, hr)
+    }
+  }
+
+  /**
+    * Send the proof built to the peers which waited for it, or the stored proof if no proof was built or the
+    * header the proof ends at has left the best chain meanwhile
+    */
+  private def answerNipopowTipProofWaiters(built: NipopowTipProofBuilt, hr: ErgoHistory): Unit = {
+    built.proofBytesOpt match {
+      case Some(proofBytes) if hr.bestHeaderIdAtHeight(built.height).contains(built.headerId) =>
+        log.info(s"Built nipopow proof for the current tip (size: ${proofBytes.length}) @ ${built.height}, " +
+          s"in ${built.tookMs} ms, sending it to ${nipopowTipProofWaiters.size} peer(s)")
+        nipopowTipProofWaiters.foreach(peer => sendNipopowProofBytes(proofBytes, peer))
+      case Some(_) =>
+        // the header the proof ends at has left the best chain while the proof was built
+        log.info(s"Nipopow proof built @ ${built.height} (in ${built.tookMs} ms) is not of the best chain any more, " +
+          s"sending the stored proof to ${nipopowTipProofWaiters.size} peer(s)")
+        nipopowTipProofWaiters.foreach(peer => sendStoredNipopowProof(hr, peer))
+      case None =>
+        log.info(s"Nipopow proof for the current tip can not be built @ ${built.height} (tried for ${built.tookMs} ms), " +
+          s"sending the stored proof to ${nipopowTipProofWaiters.size} peer(s)")
+        nipopowTipProofWaiters.foreach(peer => sendStoredNipopowProof(hr, peer))
+    }
+    nipopowTipProofWaiters.clear()
+  }
+
   /**
     * Send NiPoPoW proof to a peer asked it
     */
   private def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     if (data.m == hr.P2PNipopowProofM && data.k == hr.P2PNipopowProofK && data.headerIdBytesOpt.isEmpty) {
-      hr.readPopowProofBytesFromDb() match {
-        case Some(proofBytes) =>
-          val msg = Message(NipopowProofSpec, Right(proofBytes), None)
-          networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
-        case None =>
-          log.warn("No Nipopow Proof available")
+      // a node which is still syncing headers has no current tip to prove
+      if (data.wantsCurrentTip && hr.isHeadersChainSynced) {
+        sendNipopowTipProof(hr, peer)
+      } else {
+        sendStoredNipopowProof(hr, peer)
       }
     } else {
       // for now, we are serving proofs for concrete params only
-      log.warn(s"Peer $peer asked for a nipopow proof which can't be served (params: $data)")
+      log.warn(s"Peer $peer asked for a nipopow proof which can't be served " +
+        s"(m: ${data.m}, k: ${data.k}, header id: ${data.headerId}, pad: ${data.pad.length} byte(s))")
     }
   }
 
@@ -1594,6 +1702,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                  mempoolReader: ErgoMemPool,
                                  utxoStateReaderOpt: Option[UtxoStateReader],
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
+    case built: NipopowTipProofBuilt =>
+      nipopowTipProofBuilt(built, historyReader)
+
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
     case CheckModifiersToDownload =>
@@ -1953,6 +2064,21 @@ object ErgoNodeViewSynchronizer {
   class TransactionProcessingCacheRecord(val txBytes: Array[Byte], val source: ConnectedPeer)
 
   case object CheckModifiersToDownload
+
+  /**
+    * Signal from the build of a NiPoPoW proof for the current tip that it has ended
+    *
+    * @param build         - the build, as `NipopowTipProofCache.request` returned it
+    * @param headerId      - last header of the proof; if it could not be built, best header when the build was started
+    * @param height        - its height
+    * @param proofBytesOpt - the proof, or None if it could not be built
+    * @param tookMs        - how long the build took
+    */
+  private case class NipopowTipProofBuilt(build: NipopowTipProofCache.Build,
+                                          headerId: ModifierId,
+                                          height: Int,
+                                          proofBytesOpt: Option[Array[Byte]],
+                                          tookMs: Long)
 
   /**
    * Serializers for block sections and transactions

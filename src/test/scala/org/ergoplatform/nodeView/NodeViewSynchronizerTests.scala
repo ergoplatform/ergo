@@ -173,6 +173,42 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: GetNipopowProof with a pad which asks for the current tip") {
+    withFixture { ctx =>
+      import ctx._
+
+      // a chain which goes on past the height at which a proof was stored
+      val emptyHistory = historyGen.sample.get
+      val chain = blockStream(None).take(settings.chainSettings.makeSnapshotEvery + 12)
+      val fullHistory = applyChain(emptyHistory, chain)
+      node ! ChangedHistory(fullHistory)
+
+      def lastHeightOfProofSent(): Int = {
+        val proofBytes = ncProbe.fishForSpecificMessage(15 seconds) {
+          case stn: SendToNetwork if stn.message.spec == NipopowProofSpec => NipopowProofSpec.parseBytes(stn.message.dataBytes)
+        }
+        fullHistory.nipopowSerializer.parseBytes(proofBytes).headersChain.last.height
+      }
+
+      // the request deployed nodes write is answered with the stored proof, which ends below the best header
+      val spec = GetNipopowProofSpec
+      val plain = spec.toBytes(NipopowProofData(m = emptyHistory.P2PNipopowProofM, k = emptyHistory.P2PNipopowProofK, headerId = None))
+      node ! Message[NipopowProofData](spec, Left(plain), Option(peer))
+      val storedProofHeight = lastHeightOfProofSent()
+      storedProofHeight should be < fullHistory.headersHeight
+
+      // the same request with its empty pad replaced by a pad of one byte, 1: the proof sent back ends at the
+      // best header, not at the header the stored proof ends at
+      val msgBytes = plain.init ++ Array[Byte](1, 1)
+      node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
+      lastHeightOfProofSent() shouldBe fullHistory.headersHeight
+
+      // and a request without the pad's byte is still answered with the stored proof afterwards
+      node ! Message[NipopowProofData](spec, Left(plain), Option(peer))
+      lastHeightOfProofSent() shouldBe storedProofHeight
+    }
+  }
+
   property("NodeViewSynchronizer: Message: InvSpec") {
     withFixture { ctx =>
       import ctx._

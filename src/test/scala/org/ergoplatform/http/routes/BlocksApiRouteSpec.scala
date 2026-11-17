@@ -1,9 +1,13 @@
 package org.ergoplatform.http.routes
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{Directives, Route, ValidationRejection}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.stream.scaladsl.Source
 import akka.testkit.TestProbe
+import akka.util.ByteString
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
@@ -16,6 +20,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import scorex.core.api.http.ApiRejectionHandler
 import scorex.util.ModifierId
 
 class BlocksApiRouteSpec
@@ -31,6 +36,10 @@ class BlocksApiRouteSpec
   val prefix = "/blocks"
 
   val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).route
+  val handledRoute: Route =
+    Directives.handleRejections(ApiRejectionHandler.rejectionHandler) {
+      route
+    }
 
   val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
   val headerIdString: String    = Algos.encode(headerIdBytes)
@@ -42,6 +51,18 @@ class BlocksApiRouteSpec
         .headerIdsAt(0, 50)
         .map(Algos.encode)
         .asJson shouldEqual responseAs[Json]
+    }
+  }
+
+  it should "return method not allowed for PUT /blocks" in {
+    Get(prefix) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.OK
+    }
+    Put(prefix) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.MethodNotAllowed
+      val allow = response.headers.find(_.is("allow")).map(_.value()).getOrElse("")
+      allow should include ("GET")
+      allow should include ("POST")
     }
   }
 
@@ -71,6 +92,24 @@ class BlocksApiRouteSpec
       probe.expectMsg(LocallyGeneratedModifier(block.header))
     } finally {
       system.eventStream.unsubscribe(probe.ref)
+    }
+  }
+
+  it should "reject a valid block at unknown sub-paths" in {
+    val (st, bh)             = createUtxoState(settings)
+    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
+    val blockJson: UniversalEntity =
+      HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
+
+    Post(prefix + "/junk/path", blockJson) ~> route ~> check {
+      rejections should contain (ValidationRejection("Wrong modifierId format", None))
+    }
+    Post(prefix + "/junk/path", blockJson) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    val knownIdSuffix = prefix + "/" + headerIdString + "/junk/path"
+    Post(knownIdSuffix, blockJson) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 
@@ -139,6 +178,30 @@ class BlocksApiRouteSpec
         )
 
       responseAs[Seq[ErgoFullBlock]] shouldEqual expected
+    }
+  }
+
+  it should "read a streamed header ids body once" in {
+    val bytes = ByteString(Seq(headerIdString).asJson.noSpaces)
+    val materializations = new AtomicInteger
+    val source = Source.single(bytes).mapMaterializedValue { materialized =>
+      if (materializations.incrementAndGet() != 1) {
+        throw new IllegalStateException("request body materialized twice")
+      }
+      materialized
+    }
+    val entity: UniversalEntity =
+      HttpEntity.Default(ContentTypes.`application/json`, bytes.length.toLong, source)
+    val expected = history
+      .typedModifierById[Header](headerIdBytes)
+      .flatMap(history.getFullBlock)
+      .toSeq
+    expected.size shouldBe 1
+
+    Post(prefix + "/headerIds", entity) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Seq[ErgoFullBlock]] shouldEqual expected
+      materializations.get() shouldBe 1
     }
   }
 

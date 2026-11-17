@@ -53,7 +53,7 @@ case class MiningApiRoute(miner: ActorRef,
     * Useful for external miners when they want to insert certain transactions.
     */
   def candidateWithTxsR: Route = (path("candidateWithTxs")
-    & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
+    & post & withAuth & entity(as[Seq[ErgoTransaction]])) { txs =>
 
     val prepareCmd = CandidateGenerator.GenerateCandidate(txs, reply = true, forced = false)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
@@ -61,7 +61,7 @@ case class MiningApiRoute(miner: ActorRef,
   }
 
   def candidateWithTxsAndPkR: Route = (path("candidateWithTxsAndPk")
-    & post & entity(as[MiningRequest]) & withAuth) { txsAndPk =>
+    & post & withAuth & entity(as[MiningRequest])) { txsAndPk =>
     val tryPk = Try(GroupElementSerializer.fromBytes(Hex.decode(txsAndPk.pk)))
     tryPk match {
       case Failure(_) =>

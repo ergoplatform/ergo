@@ -26,7 +26,8 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
       case None =>
         w.put(0)
     }
-    w.putUShort(0) // to allow adding new data in future, we are adding possible pad length
+    w.putUShort(data.pad.length) // length of additional data, which a reader that does not know it skips
+    w.putBytes(data.pad)
   }
 
   override def parse(r: Reader): NipopowProofData = {
@@ -42,9 +43,11 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
       None
     }
     val remainingBytes = r.getUShort()
-    if (remainingBytes > 0 && remainingBytes < SizeLimit) {
-      r.getBytes(remainingBytes) // current version of reader just skips possible additional bytes
+    val pad = if (remainingBytes > 0 && remainingBytes < SizeLimit) {
+      r.getBytes(remainingBytes)
+    } else {
+      Array.emptyByteArray
     }
-    NipopowProofData(m, k, headerIdOpt)
+    NipopowProofData(m, k, headerIdOpt, pad)
   }
 }

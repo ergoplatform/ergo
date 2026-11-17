@@ -108,6 +108,46 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
   }
 
   /**
+    * Compares the transactions of every address of `chain` read with only the inputs, the outputs
+    * or both of the address (`relevantInputs` and `relevantOutputs` of the API) with the full
+    * transactions filtered by the tree of the address: they have to list the same boxes. The
+    * address has to place every box number of its transactions without falling back to reading
+    * boxes (its box lookup answers for each).
+    *
+    * @return the differences found, empty if the filtered transactions are the full ones filtered by tree
+    */
+  private def relevantBoxDifferences(history: ErgoHistory, chain: Seq[ErgoFullBlock])
+                                    (implicit segmentThreshold: Int): Seq[String] = {
+    val addresses = numbered(chain).flatMap(_._1.outputs).map(box => hashErgoTree(box.ergoTree)).distinct
+    type Listed = (ModifierId, Seq[Long], Seq[Long])
+    def numbers(txs: Array[IndexedErgoTransaction]): Seq[Listed] =
+      txs.toSeq.map(tx => (tx.id, tx.inputs.map(_.globalIndex), tx.outputs.map(_.globalIndex)))
+    addresses.flatMap { address =>
+      history.typedExtraIndexById[IndexedErgoAddress](address).toSeq.flatMap { row =>
+        Try {
+          val full = row.retrieveTxs(history, 0, Int.MaxValue)
+          val own = full.flatMap(tx => tx.inputs ++ tx.outputs)
+            .filter(box => hashErgoTree(box.box.ergoTree) == address).map(_.globalIndex).toSet
+          val fullListed = numbers(full)
+          val lookup = row.boxLookup(history)
+          val unplaced = full.flatMap(tx => tx.inputNums ++ tx.outputNums).filter(n => lookup(n).isEmpty)
+          val placement =
+            if (unplaced.isEmpty) None else Some(s"address $address cannot place box numbers ${unplaced.mkString(",")}")
+          val filtering = Seq(true -> true, true -> false, false -> true).flatMap { case (inputs, outputs) =>
+            val expected = fullListed.map { case (id, in, out) =>
+              (id, if (inputs) in.filter(own) else in, if (outputs) out.filter(own) else out)
+            }
+            val read = numbers(row.retrieveTxs(history, 0, Int.MaxValue, inputs, outputs))
+            if (read == expected) None
+            else Some(s"address $address with relevantInputs=$inputs, relevantOutputs=$outputs lists $read, expected $expected")
+          }
+          placement.toSeq ++ filtering
+        }.recover { case e => Seq(s"address $address: reading its transactions failed with $e") }.get
+      }
+    }
+  }
+
+  /**
     * A real node view holder (history and UTXO state) with four applied blocks and the production
     * indexer caught up with them.
     *
@@ -301,7 +341,7 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
         if (reached.indexedHeaderId.contains(chain.last.id) && reached.rollbackTo == 0 && reached.globalTxIndex == txCount) None
         else Some(s"index is at height ${reached.indexedHeight}, block ${reached.indexedHeaderId}, with ${reached.globalTxIndex} transactions, " +
           s"rollback to ${reached.rollbackTo}; the applied chain is at height ${chain.last.header.height}, block ${chain.last.id}, with $txCount")
-      behind.toSeq ++ addressTxDifferences(getHistory, chain)
+      behind.toSeq ++ addressTxDifferences(getHistory, chain) ++ relevantBoxDifferences(getHistory, chain)
     }
   }
 
@@ -467,6 +507,32 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
       node.deliver(node.branch(node.chain.last)(state => node.ordinaryTxs(state).take(1) ++ spends))
       node.indexDifferences() shouldBe empty
       node.watchedRow.txSegmentCount shouldBe 1
+    }
+  }
+
+  property("the transactions of an address with box segments list only its boxes when asked, also after a branch switch") {
+    // the production indexer with segments of 8 numbers
+    withNode(segmentThreshold = Some(8)) { node =>
+      import node.segmentThreshold
+      val boxes = node.fund(10)
+      node.indexDifferences() shouldBe empty
+      node.watchedRow.boxSegmentCount shouldBe 1
+
+      // boxes of the segment and of the row are spent, one of them back to the address
+      val fork = node.chain.last
+      val abandoned = node.branch(fork)(state => node.ordinaryTxs(state) ++ Seq(spend(boxes(1)), move(boxes(9), watchedTree)))
+      node.deliver(abandoned)
+      node.indexDifferences() shouldBe empty
+
+      // the better branch spends other boxes of the segment
+      node.deliver(node.branch(fork)(state => node.ordinaryTxs(state) ++ Seq(spend(boxes(2)), spend(boxes(3))), node.ordinary))
+      node.indexDifferences() shouldBe empty
+      node.watchedRow.boxSegmentCount shouldBe 1
+
+      val read = node.watchedRow.retrieveTxs(node.history, 0, 20, relevantInputs = true, relevantOutputs = true)
+      val spending = read.filter(_.outputs.isEmpty)
+      spending.map(_.inputs.map(_.id)).toSet shouldBe Set(Seq(bytesToId(boxes(2).id)), Seq(bytesToId(boxes(3).id)))
+      read.flatMap(_.outputs).map(_.id).toSet shouldBe boxes.map(box => bytesToId(box.id)).toSet
     }
   }
 

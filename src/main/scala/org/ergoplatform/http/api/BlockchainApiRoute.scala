@@ -53,6 +53,12 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private val unconfirmed: Directive[Tuple1[Boolean]] = parameters("includeUnconfirmed".as[Boolean] ? false)
 
   /**
+    * Whether each transaction of an address lists only the inputs and the outputs of that address
+    */
+  private val relevantBoxes: Directive[(Boolean, Boolean)] =
+    parameters("relevantInputs".as[Boolean] ? false, "relevantOutputs".as[Boolean] ? false)
+
+  /**
     * Total number of boxes/transactions that can be requested at once to avoid too heavy requests ([[BlocksApiRoute.MaxHeaders]])
     */
   private val MaxItems = 16384
@@ -189,31 +195,42 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getTxByIndexF(index))
   }
 
-  private def getTxsByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoTransaction],Long)] =
+  private def getTxsByAddress(addr: ErgoAddress,
+                              offset: Int,
+                              limit: Int,
+                              relevantInputs: Boolean,
+                              relevantOutputs: Boolean): Future[(Seq[IndexedErgoTransaction],Long)] =
     getHistory.map { history =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveTxs(history, offset, limit)(segmentTreshold), addr.txCount(segmentTreshold))
+        case Some(addr) =>
+          (addr.retrieveTxs(history, offset, limit, relevantInputs, relevantOutputs)(segmentTreshold), addr.txCount(segmentTreshold))
         case None       => (Seq.empty[IndexedErgoTransaction], 0L)
       }
     }
 
   private def validateAndGetTxsByAddress(address: ErgoAddress,
                                          offset: Int,
-                                         limit: Int): Route = {
+                                         limit: Int,
+                                         relevantInputs: Boolean,
+                                         relevantOutputs: Boolean): Route = {
     if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems transactions can be requested")
     } else {
-      ApiResponse(getTxsByAddress(address, offset, limit))
+      ApiResponse(getTxsByAddress(address, offset, limit, relevantInputs, relevantOutputs))
     }
   }
 
-  private def getTxsByAddressR: Route = (post & pathPrefix("transaction" / "byAddress") & ergoAddress & paging) { (address, offset, limit) =>
-    validateAndGetTxsByAddress(address, offset, limit)
-  }
+  private def getTxsByAddressR: Route =
+    (post & pathPrefix("transaction" / "byAddress") & ergoAddress & paging & relevantBoxes) {
+      (address, offset, limit, relevantInputs, relevantOutputs) =>
+        validateAndGetTxsByAddress(address, offset, limit, relevantInputs, relevantOutputs)
+    }
 
-  private def getTxsByAddressGetRoute: Route = (pathPrefix("transaction" / "byAddress") & get & addressPass & paging) { (address, offset, limit) =>
-    validateAndGetTxsByAddress(address, offset, limit)
-  }
+  private def getTxsByAddressGetRoute: Route =
+    (pathPrefix("transaction" / "byAddress") & get & addressPass & paging & relevantBoxes) {
+      (address, offset, limit, relevantInputs, relevantOutputs) =>
+        validateAndGetTxsByAddress(address, offset, limit, relevantInputs, relevantOutputs)
+    }
 
   private def getTxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>

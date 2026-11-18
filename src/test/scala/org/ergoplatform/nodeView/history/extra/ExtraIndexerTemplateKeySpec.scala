@@ -81,12 +81,12 @@ class ExtraIndexerTemplateKeySpec extends ErgoCorePropertyTest with NodeViewTest
       val templateKey = hashTreeTemplate(tree)
       templateKey shouldBe hashTreeTemplate(tree) // deterministic
       templateKey should not be hashErgoTree(tree) // the defect: these were equal on the base
-      // the derivation: the address key hashed again with a suffix, as tokens separate their key
-      templateKey shouldBe bytesToId(Algos.hash(hashErgoTree(tree) + "template"))
+      // the derivation: one hash of the tree bytes with a suffix, as tokens separate their key
+      templateKey shouldBe bytesToId(Algos.hash(tree.bytesHex + "template"))
     }
-    templateKey.toString shouldBe "b26e420014c341c78e4f3441df9cf5a18311a31d996b7aa8017336c7330cbcca"
-    hashTreeTemplate(treeFromBytes("1804016f0000")).toString shouldBe "843ab2d9a89c2b37857f0ecb7d0be635c0722815c1dd08fbf5ce94a6fa580c07"
-    hashTreeTemplate(treeFromBytes("180401700000")).toString shouldBe "f19853ac3cdad1df6c01b2c49fa30db01fd33b21941e3045ee55b9e78f776b8b"
+    templateKey.toString shouldBe "794c8955932584c0aa93331b5be77d09f8a8a5fc92dac4a019b597273f959412"
+    hashTreeTemplate(treeFromBytes("1804016f0000")).toString shouldBe "13ac1709f2c66cb6c87f192104842aee3f1d0c59cf8750f081ecb0959a9dbd68"
+    hashTreeTemplate(treeFromBytes("180401700000")).toString shouldBe "3393ef897aed1ff7ee8c5c6e743cc3630237801e765f399056fd7bcb6aaa7fb3"
   }
 
   /** A real node view holder and the production indexer, as in `ExtraIndexerAppliedBlocksSpec`. */
@@ -366,6 +366,34 @@ class ExtraIndexerTemplateKeySpec extends ErgoCorePropertyTest with NodeViewTest
       oldRecord shouldBe Some(List(firstNumber, droppedNumber))
       node.addressRecord shouldBe None
       node.templateRecord shouldBe None
+    }
+  }
+
+  property("an index written under an earlier fallback key: a chain switch which undoes a spend of such a box restores it and starts a new template record") {
+    withNode(checkpointedSettings) { node =>
+      val (box, spare) = node.firstPayment()
+      val number = node.boxRecord(box).get.globalIndex
+      // the record under the current template key is removed, which is what an index written under
+      // an earlier fallback key looks like to the current code
+      val storage = node.history.historyStorage
+      storage.removeExtra(Array(templateKey))
+      node.templateRecord shouldBe None
+
+      val spend = move(box, Constants.TrueTree)
+      val abandoned = validFullBlock(Some(node.chain.last), node.tipState, Seq(spend))
+      // switchAwayFrom waits until the better branch is indexed: the indexer survived the rollback
+      node.switchAwayFrom(abandoned, spare) {
+        node.boxRecord(box).flatMap(_.spendingTxIdOpt) shouldBe Some(spend.id)
+        node.addressRecord.map(_.boxes.toList) shouldBe Some(List(-number))
+        node.templateRecord shouldBe None // the spend found no record under the current key
+      }
+
+      node.state.boxById(box.id).isDefined shouldBe true
+      node.boxRecord(box).flatMap(_.spendingTxIdOpt) shouldBe None
+      node.addressRecord.map(_.boxes.toList) shouldBe Some(List(number))
+      node.addressRecord.flatMap(_.balanceInfo).map(_.nanoErgs) shouldBe Some(box.value)
+      node.templateRecord.map(_.boxes.toList) shouldBe Some(List(number))
+      node.templateRecord.get.retrieveBoxes(node.history, 0, 10).map(_.id).toList shouldBe List(bytesToId(box.id))
     }
   }
 }

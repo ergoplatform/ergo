@@ -177,6 +177,11 @@ jobs:
        - name: Runs it node tests
          # above DeepRollBackSpec's 20 min Await started late in the run
          timeout-minutes: 35
+         env:
+           # sbt-docker 1.11.0 parses BuildKit's config digest as the image ID.
+           # Docker's containerd store cannot tag that digest; use the supported
+           # legacy builder for this disposable test image until the plugin is updated.
+           DOCKER_BUILDKIT: '0'
          run: |
            cd it
            mkdir tmp

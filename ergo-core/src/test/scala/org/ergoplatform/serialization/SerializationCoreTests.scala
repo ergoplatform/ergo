@@ -68,6 +68,10 @@ class SerializationCoreTests extends ErgoCorePropertyTest with SerializationTest
     checkSerializationRoundtrip(ergoSyncInfoV2Gen, ErgoSyncInfoSerializer)
   }
 
+  property("ErgoSyncInfo v3 serialization") {
+    checkSerializationRoundtrip(ergoSyncInfoV3Gen, ErgoSyncInfoSerializer)
+  }
+
   property("ErgoHeader serialization") {
     checkSerializationRoundtripAndSize(defaultHeaderGen, HeaderSerializer)
   }

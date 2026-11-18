@@ -278,6 +278,8 @@ trait ErgoWalletService {
 
 object ErgoWalletService {
 
+  final class BoxResolutionException(message: String) extends IllegalArgumentException(message)
+
   sealed abstract class ChangeAddressValidationException(message: String)
     extends IllegalArgumentException(message)
 
@@ -569,6 +571,15 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         state.readBoxFromUtxoWithWalletFallback(dataInput.boxId)
       }
     }
+
+    val validatedBoxes = for {
+      _ <- ErgoProvingInterpreter.validateBoxIds("Input", tx.inputs.map(_.boxId), inputBoxes)
+      _ <- ErgoProvingInterpreter.validateBoxIds("Data input", tx.dataInputs.map(_.boxId), dataBoxes)
+    } yield ()
+    validatedBoxes.recoverWith {
+      case e: IllegalArgumentException =>
+        Failure(new ErgoWalletService.BoxResolutionException(e.getMessage))
+    }.get
 
     val prover = state.walletVars.proverOpt.getOrElse(ErgoProvingInterpreter(IndexedSeq.empty, state.parameters))
     prover.bagForTransaction(tx, inputBoxes, dataBoxes, state.stateContext, real, simulated)

@@ -179,6 +179,23 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
     private val ergoWalletService = new ErgoWalletServiceImpl(settings)
 
+    private var serviceStateOpt: Option[ErgoWalletState] = None
+
+    private def serviceState: ErgoWalletState = serviceStateOpt.getOrElse {
+      val state = ErgoWalletState.initial(
+        settings.copy(directory = createTempDir.getAbsolutePath), parameters).get
+      serviceStateOpt = Some(state)
+      state
+    }
+
+    override def postStop(): Unit = {
+      serviceStateOpt.foreach { state =>
+        state.registry.close()
+        state.storage.close()
+      }
+      super.postStop()
+    }
+
     def receive: Receive = {
 
       case _: InitWallet => sender() ! Success(SecretString.create(WalletActorStub.mnemonic))
@@ -269,6 +286,16 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         val sc = ErgoStateContext.empty(settings.chainSettings, parameters)
         sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
+        }
+
+      case GenerateCommitmentsFor(tx, secrets, inputs, dataInputs) =>
+        sender() ! GenerateCommitmentsResponse(
+          ergoWalletService.generateCommitments(serviceState, tx, secrets, inputs, dataInputs))
+
+      case ExtractHints(tx, real, simulated, inputs, dataInputs) =>
+        Try(ergoWalletService.extractHints(serviceState, tx, real, simulated, inputs, dataInputs)) match {
+          case Success(bag) => sender() ! ExtractHintsResult(bag)
+          case Failure(e) => sender() ! akka.actor.Status.Failure(e)
         }
     }
   }

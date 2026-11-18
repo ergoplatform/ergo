@@ -1,8 +1,11 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.wallet.Constants.PaymentsScanId
-import org.ergoplatform.ErgoLikeTransaction
+import org.ergoplatform.{ErgoBoxAssetsHolder, ErgoLikeTransaction}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
+import org.ergoplatform.wallet.boxes.DefaultBoxSelector.NotEnoughCoinsForChangeBoxesError
+import org.ergoplatform.wallet.boxes.ReplaceCompactCollectBoxSelector.MaxInputsExceededError
+import scorex.util.bytesToId
 import sigmastate.helpers.TestingHelpers._
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
@@ -18,6 +21,51 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
 
   def box(value:Long) = testBox(value, ErgoTree.fromProposition(TrueLeaf.toSigmaProp), 0)
   def trackedBox(value:Long) = TrackedBox(parentTx, 0, None, box(value), Set(PaymentsScanId))
+
+  property("optional token dust cannot replace a valid selection with insufficient change") {
+    val token = bytesToId(Array.fill[Byte](32)(1))
+    val funding = ErgoBoxAssetsHolder(BoxSelector.MinBoxValue)
+    val dust = ErgoBoxAssetsHolder(1L, Map(token -> 1L))
+    val inputs = Seq(funding, dust)
+    val accept: ErgoBoxAssetsHolder => Boolean = _ => true
+    val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)
+    val initial = new DefaultBoxSelector(None).select(inputs.iterator, accept, funding.value, Map.empty).right.value
+    initial.inputBoxes shouldBe Seq(funding)
+    selector.calcChange(inputs, funding.value, Map.empty).left.value shouldBe a[NotEnoughCoinsForChangeBoxesError]
+    val result = selector.select(inputs.iterator, accept, funding.value, Map.empty).right.value
+    result.inputBoxes shouldBe initial.inputBoxes
+    result.changeBoxes shouldBe initial.changeBoxes
+    result.payToReemissionBox shouldBe initial.payToReemissionBox
+    selector.collectDust(initial, Seq(dust), funding.value, Map.empty).right.value should be theSameInstanceAs initial
+  }
+
+  property("optional token dust is collected when its change is funded") {
+    val token = bytesToId(Array.fill[Byte](32)(2))
+    val funding = ErgoBoxAssetsHolder(BoxSelector.MinBoxValue)
+    val dust = ErgoBoxAssetsHolder(BoxSelector.MinBoxValue, Map(token -> 1L))
+    val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)
+    val accept: ErgoBoxAssetsHolder => Boolean = _ => true
+    val result = selector.select(Seq(funding, dust).iterator, accept, funding.value, Map.empty).right.value
+    result.inputBoxes shouldBe Seq(funding, dust)
+    result.changeBoxes shouldBe Seq(dust)
+    result.payToReemissionBox shouldBe None
+  }
+
+  property("required token inputs above the limit return the typed maximum input error") {
+    val token = bytesToId(Array.fill[Byte](32)(3))
+    val inputs = (1 to 3).map(n => ErgoBoxAssetsHolder(BoxSelector.MinBoxValue * n, Map(token -> 1L)))
+    val target = inputs.map(_.value).sum
+    val accept: ErgoBoxAssetsHolder => Boolean = _ => true
+    new DefaultBoxSelector(None).select(inputs.iterator, accept, target, Map(token -> 3L)).isRight shouldBe true
+    val selector = new ReplaceCompactCollectBoxSelector(2, 2, None)
+    selector.select(inputs.iterator, accept, target, Map(token -> 3L)).left.value shouldBe a[MaxInputsExceededError]
+  }
+
+  property("compression preserves a selection with no removable inputs") {
+    val selector = new ReplaceCompactCollectBoxSelector(2, 2, None)
+    val empty = new BoxSelectionResult[ErgoBoxAssetsHolder](Seq.empty, Seq.empty, None)
+    selector.compress(empty, 0L, Map.empty).right.value shouldBe empty
+  }
 
   property("compress() done properly") {
     val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)

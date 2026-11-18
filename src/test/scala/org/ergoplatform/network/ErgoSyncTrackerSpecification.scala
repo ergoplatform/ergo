@@ -136,7 +136,51 @@ class ErgoSyncTrackerSpecification extends ErgoCorePropertyTest {
     status.hasFullBlockAt(799) shouldBe false
     status.hasFullBlockAt(800) shouldBe true
     status.hasFullBlockAt(1000) shouldBe true
-    status.hasFullBlockAt(1001) shouldBe false
+    // A sync message describes a snapshot: the peer can receive newer blocks before its next one.
+    status.hasFullBlockAt(1001) shouldBe true
+  }
+
+  property("full-block availability permits progress beyond the last sync but preserves pruned gaps") {
+    val peer = createPeer("v3peer", 9020)
+    val status = ErgoPeerStatus(peer, Older, 1000, Seq.empty, Seq(800 -> 850, 900 -> 1000), None, None)
+
+    status.hasFullBlockAt(799) shouldBe false
+    status.hasFullBlockAt(800) shouldBe true
+    status.hasFullBlockAt(850) shouldBe true
+    status.hasFullBlockAt(851) shouldBe false
+    status.hasFullBlockAt(899) shouldBe false
+    status.hasFullBlockAt(900) shouldBe true
+    status.hasFullBlockAt(1000) shouldBe true
+    status.hasFullBlockAt(1001) shouldBe true
+    status.hasFullBlockAt(1058) shouldBe true
+
+    // The extension must use the highest reported endpoint even if the ranges are unsorted.
+    val unsorted = status.copy(storedFullblocks = status.storedFullblocks.reverse)
+    unsorted.hasFullBlockAt(875) shouldBe false
+    unsorted.hasFullBlockAt(1058) shouldBe true
+  }
+
+  property("legacy full-block availability treats the last reported height as a snapshot") {
+    def statusFor(blocksToKeep: Option[Int], height: Int = 1000): ErgoPeerStatus = {
+      val features = blocksToKeep.toSeq.map { count =>
+        ModePeerFeature(org.ergoplatform.nodeView.state.StateType.Utxo, true, None, count)
+      }
+      val info = PeerInfo(defaultPeerSpec.copy(features = features), System.currentTimeMillis(), Some(Incoming), 5L)
+      val peer = createPeer("legacy", 9030).copy(peerInfo = Some(info))
+      ErgoPeerStatus(peer, Older, height, None, None)
+    }
+
+    Seq(Some(ModePeerFeature.AllBlocksKept), None).foreach { mode =>
+      statusFor(mode).hasFullBlockAt(1058) shouldBe true
+    }
+    val pruned = statusFor(Some(200))
+    pruned.hasFullBlockAt(800) shouldBe false
+    pruned.hasFullBlockAt(801) shouldBe true
+    pruned.hasFullBlockAt(1000) shouldBe true
+    pruned.hasFullBlockAt(1058) shouldBe true
+    statusFor(Some(0)).hasFullBlockAt(1058) shouldBe false
+    statusFor(Some(ModePeerFeature.UTXOSetBootstrapped)).hasFullBlockAt(1058) shouldBe false
+    statusFor(Some(200), 0).hasFullBlockAt(1058) shouldBe false
   }
 
   property("SyncV3Filter selects peers by SyncV3PeerFeature, not by protocolVersion >= 6.0.9") {

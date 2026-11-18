@@ -41,20 +41,23 @@ case class ErgoPeerStatus(peer: ConnectedPeer,
   }
 
   /**
-    * Whether the peer stores a full block at the given height h
+    * Whether the peer may serve a full block at the given height h.
+    * The last sync message is a snapshot, so its upper bounds must not prevent
+    * requesting newer blocks the peer may have received since then.
     */
   def hasFullBlockAt(h: Height): Boolean = {
     if (storedFullblocks.nonEmpty) {
-      storedFullblocks.exists { case (start, end) => h >= start && h <= end }
+      storedFullblocks.exists { case (start, end) => h >= start && h <= end } ||
+        h > storedFullblocks.map(_._2).max
     } else {
       mode match {
         case Some(m) if m.allBlocksAvailable =>
-          headersHeight <= 0 || h <= headersHeight
+          true
         case Some(m) if m.blocksToKeep > 0 && headersHeight > 0 =>
           val minHeight = Math.max(1, headersHeight - m.blocksToKeep + 1)
-          h >= minHeight && h <= headersHeight
+          h >= minHeight
         case None =>
-          headersHeight <= 0 || h <= headersHeight
+          true
         case _ =>
           false
       }

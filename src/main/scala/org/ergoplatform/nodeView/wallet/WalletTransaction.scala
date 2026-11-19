@@ -30,7 +30,8 @@ final case class WalletTransaction(tx: ErgoTransaction, inclusionHeight: Int, sc
 object WalletTransactionSerializer extends ErgoSerializer[WalletTransaction] {
 
   override def serialize(wtx: WalletTransaction, w: Writer): Unit = {
-    val txBytes = wtx.tx.bytes
+    // in the form its id commits to, so `parse` below gets the same id back
+    val txBytes = ErgoTransaction.withIdVersions(wtx.tx)(wtx.tx.bytes)
     w.putInt(wtx.inclusionHeight)
 
     val scansCount = wtx.scanIds.size.toShort

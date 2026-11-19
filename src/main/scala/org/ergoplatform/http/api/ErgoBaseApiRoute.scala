@@ -128,7 +128,8 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
     ergoSettings: ErgoSettings
   ): Future[Try[UnconfirmedTransaction]] = {
     val now: Long = System.currentTimeMillis()
-    val bytes     = Some(tx.bytes)
+    // relayed to peers, in the form its id commits to
+    val bytes     = Some(ErgoTransaction.withIdVersions(tx)(tx.bytes))
 
     getStateAndPool(readersHolder)
       .map {

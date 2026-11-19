@@ -10,7 +10,7 @@ import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform._
 import org.ergoplatform.http.api.ApiEncoderOption.Detalization
 import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.{Algos, ErgoAlgos}
@@ -188,10 +188,16 @@ trait ApiCodecs extends JsonCodecs {
       .mapObject(_.add("size", tx.size.asJson))
   })
 
+  // Decoded at a v6 block's versions and read back from its bytes, so the transaction gets the id a block holding
+  // it has, and the parse rules of a block (e.g. no 6.0 types in registers) apply.
   implicit val transactionDecoder: Decoder[ErgoTransaction] = Decoder.instance({ cursor =>
-    for {
-      ergoLikeTx <- cursor.as[ErgoLikeTransaction]
-    } yield ErgoTransaction(ergoLikeTx)
+    ErgoTransaction.withV6BlockVersions {
+      for {
+        ergoLikeTx <- cursor.as[ErgoLikeTransaction]
+        tx <- Try(ErgoTransactionSerializer.parseBytes(ErgoLikeTransactionSerializer.toBytes(ergoLikeTx)))
+          .toEither.leftMap(e => DecodingFailure(s"Invalid transaction: ${e.getMessage}", cursor.history))
+      } yield tx
+    }
   })
 
   @nowarn

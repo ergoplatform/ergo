@@ -71,6 +71,9 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
+  /** Length of the transaction in the form its id commits to, whatever context first reads it. */
+  override lazy val size: Int = sizeOpt.getOrElse(ErgoTransaction.withIdVersions(this)(bytes.length))
+
   /**
     * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).
     * Id is 248-bit long, to distinguish transaction ids from witness ids in Merkle tree of transactions,
@@ -570,6 +573,19 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     case t: STuple => t.items.exists(mayHoldBox)
     case o: SOption[_] => mayHoldBox(o.elemType)
     case _ => false
+  }
+
+  /**
+    * Runs `block` at the versions `tx`'s id was computed at: `withV6BlockVersions`, unless `tx` has a
+    * version-dependent value and its id commits to the form below ErgoTree version 3 (a transaction of a block
+    * before version 4, or one built at the default context), then `withStateBoxVersions`. Serializing `tx` in
+    * `block` then gives it in the form its id commits to (the id hashes it without proofs).
+    */
+  def withIdVersions[T](tx: ErgoTransaction)(block: => T): T = {
+    val idBelowV3 = hasVersionDependentValues(tx) &&
+      !Try(withV6BlockVersions(Algos.hash(ErgoLikeTransaction.bytesToSign(tx)))).toOption
+        .exists(util.Arrays.equals(_, tx.serializedId))
+    if (idBelowV3) withStateBoxVersions(block) else withV6BlockVersions(block)
   }
 
   private def unresolvedIndices(inputs: IndexedSeq[BoxId], resolvedInputs: IndexedSeq[ErgoBox]): IndexedSeq[Int] =

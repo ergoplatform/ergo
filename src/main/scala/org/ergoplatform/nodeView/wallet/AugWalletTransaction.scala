@@ -28,7 +28,7 @@ object AugWalletTransaction extends ApiCodecs {
 
   def jsonEncoder(implicit e: ErgoAddressEncoder): Encoder[AugWalletTransaction] = { obj =>
     implicit val enc: Encoder[ErgoBox] = boxEncoder(e)
-    Json.obj(
+    ErgoTransaction.withRenderVersions(obj.wtx.tx)(Json.obj(
       "id" -> obj.wtx.tx.id.asJson,
       "inputs" -> obj.wtx.tx.inputs.asJson,
       "dataInputs" -> obj.wtx.tx.dataInputs.asJson,
@@ -38,7 +38,7 @@ object AugWalletTransaction extends ApiCodecs {
       "inclusionHeight" -> obj.wtx.inclusionHeight.asJson,
       "scans" -> obj.wtx.scanIds.asJson,
       "numConfirmations" -> obj.numConfirmations.asJson
-    )
+    ))
   }
 
   implicit val jsonDecoder: Decoder[AugWalletTransaction] = { c =>

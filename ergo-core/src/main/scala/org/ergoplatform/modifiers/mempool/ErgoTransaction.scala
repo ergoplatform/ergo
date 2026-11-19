@@ -588,6 +588,16 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     if (idBelowV3) withStateBoxVersions(block) else withV6BlockVersions(block)
   }
 
+  /**
+    * Runs `block`, a JSON rendering of `tx`, with its output ids as the UTXO set has them and its registers and
+    * extensions in the form its id commits to. An output id that fails at `withStateBoxVersions` fails the
+    * rendering, as it did before.
+    */
+  def withRenderVersions[T](tx: ErgoTransaction)(block: => T): T = {
+    withStateBoxVersions(tx.outputs.foreach(_.id))
+    withIdVersions(tx)(block)
+  }
+
   private def unresolvedIndices(inputs: IndexedSeq[BoxId], resolvedInputs: IndexedSeq[ErgoBox]): IndexedSeq[Int] =
     inputs.zipWithIndex.filterNot(i => resolvedInputs.exists(bx => util.Arrays.equals(bx.id, i._1))).map(_._2)
 }

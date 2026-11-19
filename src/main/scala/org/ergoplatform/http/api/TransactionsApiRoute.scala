@@ -108,7 +108,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   */
   private def createTransactionWithResolvedInputs(tx: ErgoTransaction,
                                                   resolvedInputs: Map[BoxId, ErgoBox],
-                                                  cost: Option[Int]): Json = {
+                                                  cost: Option[Int]): Json = ErgoTransaction.withRenderVersions(tx) {
 
     val enrichedInputs = tx.inputs.map { input =>
       val baseInput = Json.obj(

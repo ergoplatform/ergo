@@ -184,8 +184,10 @@ trait ApiCodecs extends JsonCodecs {
   })
 
   implicit val transactionEncoder: Encoder[ErgoTransaction] = Encoder.instance({ tx =>
-    tx.asInstanceOf[ErgoLikeTransaction].asJson
-      .mapObject(_.add("size", tx.size.asJson))
+    ErgoTransaction.withRenderVersions(tx) {
+      tx.asInstanceOf[ErgoLikeTransaction].asJson
+        .mapObject(_.add("size", tx.size.asJson))
+    }
   })
 
   // Decoded at a v6 block's versions and read back from its bytes, so the transaction gets the id a block holding

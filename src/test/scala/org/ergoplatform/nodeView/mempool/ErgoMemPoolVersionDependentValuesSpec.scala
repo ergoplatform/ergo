@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.mining.emission.EmissionRules.CoinsInOneErgo
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state.BoxHolder
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -68,6 +68,12 @@ class ErgoMemPoolVersionDependentValuesSpec extends AnyFlatSpec
   it should "accept the same spend with constants" in {
     val outcome = process(spend(register = Some(LongConstant(1L)), extension = Some(LongConstant(1L))))
     outcome shouldBe a[ProcessingOutcome.Accepted]
+  }
+
+  it should "relay a block transaction returned to the pool under its own id" in {
+    val blockTx = readFromBlock(spend(register = Some(upcastValue), extension = Some(upcastValue)))
+    val relayed = UnconfirmedTransaction(blockTx, None).transactionBytes.get
+    atV6(ErgoTransactionSerializer.parseBytes(relayed)).id shouldBe blockTx.id // as a peer parses it
   }
 
 }

@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import io.circe.syntax._
 import java.io.File
 import java.nio.file.Files
 
@@ -315,6 +316,16 @@ class ErgoWalletServiceSpec
 
       }
     }
+  }
+
+  property("a wallet transaction from a v6 block renders in the form its id commits to") {
+    val input = Input(ADKey @@ Array.fill(32)(2.toByte), ProverResult(Array.emptyByteArray, ContextExtension.empty))
+    val output = new ErgoBoxCandidate(1000000000L, TrueTree, 0, additionalRegisters = Map(ErgoBox.R4 -> upcastValue))
+    val blockTx = readFromBlock(atV6(ErgoTransaction(IndexedSeq(input), IndexedSeq(output))))
+    val json = AugWalletTransaction(WalletTransaction(blockTx, 1, Seq(PaymentsScanId)), 0)
+      .asJson(AugWalletTransaction.jsonEncoder(settings.addressEncoder))
+    json.hcursor.downField("outputs").downN(0).downField("additionalRegisters").downField("R4")
+      .as[String] shouldBe Right(upcastHexV3)
   }
 
   property("a wallet-signed transaction keeps its id and signature when read from a v6 block") {

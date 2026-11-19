@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
 import org.ergoplatform.http.api.ApiCodecs
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.VersionDependentValues._
@@ -12,6 +13,7 @@ import sigma.data.CBox
 import sigma.interpreter.{ContextExtension, ProverResult}
 
 import java.math.BigInteger
+import scala.util.Try
 
 class ErgoTransactionVersionsSpec extends ErgoCorePropertyTest with ApiCodecs {
 
@@ -47,6 +49,28 @@ class ErgoTransactionVersionsSpec extends ErgoCorePropertyTest with ApiCodecs {
     val blockTx = readFromBlock(tx(register = Some(upcastValue), extension = Some(upcastValue)))
     val inBlock = atV6(ErgoTransactionSerializer.toBytes(blockTx)).length
     blockTx.size shouldBe inBlock // first read here, at the default context
+  }
+
+  property("json of a v6 block transaction holds the form its id commits to and decodes to its id and size") {
+    val blockTx = readFromBlock(tx(register = Some(upcastValue), extension = Some(upcastValue)))
+    val json = blockTx.asJson
+    json.hcursor.downField("outputs").downN(0).downField("additionalRegisters").downField("R4")
+      .as[String] shouldBe Right(upcastHexV3)
+    val decoded = json.as[ErgoTransaction]
+    decoded.map(_.id) shouldBe Right(blockTx.id)
+    decoded.map(_.size) shouldBe Right(atV6(ErgoTransactionSerializer.toBytes(blockTx)).length)
+  }
+
+  property("json of a transaction from a block before version 4 decodes to its id") {
+    val blockTx = readFromBlock(tx(register = Some(upcastValue), extension = Some(upcastValue)),
+      (Header.Interpreter60Version - 1).toByte)
+    blockTx.asJson.as[ErgoTransaction].map(_.id) shouldBe Right(blockTx.id)
+  }
+
+  property("json of a transaction whose output has no id below ErgoTree version 3 is an error, as before") {
+    val t = tx(register = Some(v6Only), extension = None)
+    val rendered = Try(t.asJson)
+    withClue(s"rendered: $rendered") { rendered.isFailure shouldBe true }
   }
 
   property("transaction json decodes exactly when its bytes parse at a v6 block's versions") {

@@ -9,11 +9,14 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.settings.RESTApiSettings
 import org.ergoplatform.utils.Stubs
+import org.ergoplatform.utils.VersionDependentValues._
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -25,6 +28,7 @@ import org.ergoplatform.settings.Constants.TrueTree
 import sigma.Extensions.CollBytesOps
 
 import java.net.InetSocketAddress
+import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 
 class TransactionApiRouteSpec extends AnyFlatSpec
@@ -385,6 +389,49 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("size").as[Int] shouldEqual Right(tx.size)
     }
+  }
+
+  // A transaction with a version-dependent value, built at a v6 block's versions: the id and bytes a block holding
+  // it has.
+  private val (v6Tx, v6Bytes) = atV6 {
+    val output = new ErgoBoxCandidate(inputBox.value, TrueTree, creationHeight = 0,
+      additionalRegisters = Map(ErgoBox.R4 -> upcastValue))
+    val t = ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
+    (t, t.bytes)
+  }
+
+  // Posts to a route whose node view captures the bytes kept for relay; returns the id a peer parses from them.
+  private def relayedId(post: Route => Unit): String = {
+    val relayed = Promise[Array[Byte]]()
+    class RelayCapture extends Actor {
+      def receive: Receive = {
+        case LocallyGeneratedTransaction(utx) =>
+          relayed.trySuccess(utx.transactionBytes.get)
+          sender() ! new ProcessingOutcome.Accepted(utx, System.currentTimeMillis())
+          context.stop(self)
+      }
+    }
+    post(TransactionsApiRoute(utxoReadersRef, system.actorOf(Props(new RelayCapture)), settings).route)
+    val bytes = Await.result(relayed.future, 10.seconds)
+    atV6(ErgoTransactionSerializer.parseBytes(bytes)).id
+  }
+
+  it should "keep a v6 transaction's id when it is posted as json, and relay bytes with that id" in {
+    relayedId { r =>
+      Post(prefix, atV6(v6Tx.asJson)) ~> r ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[String] shouldEqual v6Tx.id
+      }
+    } shouldEqual v6Tx.id
+  }
+
+  it should "relay a v6 transaction posted as bytes with bytes of its id" in {
+    relayedId { r =>
+      Post(prefix + "/bytes", Json.fromString(Base16.encode(v6Bytes))) ~> r ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[String] shouldEqual v6Tx.id
+      }
+    } shouldEqual v6Tx.id
   }
 
 }

@@ -23,15 +23,18 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.validErgoTransactionGen
 import org.ergoplatform.utils.{ErgoCorePropertyTest, MempoolTestHelpers, WalletTestOps}
+import org.ergoplatform.utils.VersionDependentValues._
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
+import scorex.crypto.authds.ADKey
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
@@ -39,6 +42,7 @@ import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers.testBox
+import sigma.interpreter.{ContextExtension, ProverResult}
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Random, Success}
@@ -309,6 +313,51 @@ class ErgoWalletServiceSpec
         signedTx.inputs.size shouldBe 1
         signedTx.outputs.size shouldBe 2
 
+      }
+    }
+  }
+
+  property("a wallet-signed transaction keeps its id and signature when read from a v6 block") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+        val encodedBoxes =
+          boxesAvailable(makeGenesisBlock(pks.head.pubkey, randomNewAsset), pks.head.pubkey)
+            .map(box => Base16.encode(ErgoBoxSerializer.toBytes(box)))
+        val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map(ErgoBox.R4 -> upcastValue))
+        val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
+        val walletService = new ErgoWalletServiceImpl(settings)
+
+        def checkInV6Block(tx: ErgoTransaction): Unit = {
+          val read = readFromBlock(tx)
+          read.id shouldBe tx.id
+          withClue(s"signature over the block's form of ${read.id}") {
+            ErgoSignature.verify(read.messageToSign, read.inputs.head.spendingProof.proof, pks.head.pubkey.value) shouldBe true
+          }
+        }
+
+        val generated = walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest),
+          inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true).get.asInstanceOf[ErgoTransaction]
+        checkInV6Block(generated)
+
+        val (unsignedTx, inputs, dataInputs) = generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest),
+          inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty).get
+        val signed = walletService.signTransaction(wState.walletVars.proverOpt, unsignedTx, Seq.empty,
+          TransactionHintsBag.empty, Some(inputs), Some(dataInputs), parameters, wState.stateContext)(_ => None).get
+        checkInV6Block(signed)
+      }
+    }
+  }
+
+  property("a block transaction keeps its id through wallet storage, before and after block version 4") {
+    val input = Input(ADKey @@ Array.fill(32)(2.toByte), ProverResult(Array.emptyByteArray, ContextExtension.empty))
+    val output = new ErgoBoxCandidate(1000000000L, TrueTree, 0, additionalRegisters = Map(ErgoBox.R4 -> upcastValue))
+    val tx = atV6(ErgoTransaction(IndexedSeq(input), IndexedSeq(output)))
+    Seq((Header.Interpreter60Version - 1).toByte, Header.Interpreter60Version).foreach { blockVersion =>
+      val blockTx = readFromBlock(tx, blockVersion)
+      val stored = WalletTransactionSerializer.toBytes(WalletTransaction(blockTx, 1, Seq(PaymentsScanId)))
+      withClue(s"block version $blockVersion: ") {
+        WalletTransactionSerializer.parseBytes(stored).id shouldBe blockTx.id
       }
     }
   }

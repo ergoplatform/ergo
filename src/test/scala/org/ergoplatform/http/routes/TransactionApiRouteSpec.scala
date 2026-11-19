@@ -426,6 +426,23 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     } shouldEqual v6Tx.id
   }
 
+  it should "render a pooled v6 block transaction in the form its id commits to" in {
+    val blockTx = readFromBlock(v6Tx)
+    val pool = ErgoMemPool.empty(settings).put(UnconfirmedTransaction(blockTx, None))
+    class PoolReaders extends Actor {
+      def receive: PartialFunction[Any, Unit] = {
+        case GetReaders => sender() ! Readers(history, utxoState, pool, wallet)
+        case GetDataFromHistory(f) => sender() ! f(history)
+      }
+    }
+    val poolRoute = TransactionsApiRoute(system.actorOf(Props(new PoolReaders)), nodeViewRef, settings).route
+    Get(prefix + s"/unconfirmed/byTransactionId/${blockTx.id}") ~> poolRoute ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("outputs").downN(0).downField("additionalRegisters").downField("R4")
+        .as[String] shouldEqual Right(upcastHexV3)
+    }
+  }
+
   it should "relay a v6 transaction posted as bytes with bytes of its id" in {
     relayedId { r =>
       Post(prefix + "/bytes", Json.fromString(Base16.encode(v6Bytes))) ~> r ~> check {

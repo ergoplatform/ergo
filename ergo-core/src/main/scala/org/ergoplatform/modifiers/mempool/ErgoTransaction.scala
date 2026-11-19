@@ -29,7 +29,9 @@ import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
-import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
+import sigma.VersionContext
+import sigma.ast.{Constant, EvaluatedValue, SBox, SCollectionType, SOption, STuple, SType}
+import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter, ValueSerializer}
 
 import java.util
 import scala.annotation.nowarn
@@ -523,6 +525,52 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
 
   def apply(tx: ErgoLikeTransaction): ErgoTransaction =
     ErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
+
+  /**
+    * Runs `block` at the versions a v6 block's transactions are parsed at, (3, 3). A register or context extension
+    * value holding a leading Upcast of a constant is serialized with it from ErgoTree version 3 and without it
+    * below, so a transaction's id, bytes and size depend on the `VersionContext` they are computed in.
+    */
+  def withV6BlockVersions[T](block: => T): T = {
+    val v = Header.scriptAndTreeFromBlockVersions(Header.Interpreter60Version)
+    VersionContext.withVersions(v.activatedVersion, v.ergoTreeVersion)(block)
+  }
+
+  /**
+    * Runs `block` at sigma's default `VersionContext`, (1, 1), the one block application computes output ids and
+    * bytes in. For an output whose register holds a leading Upcast of a constant, the UTXO set's id is computed
+    * here, with the Upcast stripped.
+    */
+  def withStateBoxVersions[T](block: => T): T = VersionContext.withVersions(1, 1)(block)
+
+  /**
+    * Whether a register or context extension value of `tx` has two serialized forms: one at
+    * `withStateBoxVersions` and a different one, or none, at `withV6BlockVersions`. A value with no form at
+    * the former (e.g. one holding a 6.0 type) has a single form and is not counted.
+    */
+  def hasVersionDependentValues(tx: ErgoTransaction): Boolean = {
+    def differs(value: EvaluatedValue[_ <: SType]): Boolean = value match {
+      // constant data is serialized the same at both versions, or (a 6.0 type) not at all below 3, unless it holds
+      // a box, whose registers are serialized as values
+      case c: Constant[_] if !mayHoldBox(c.tpe) => false
+      case _ =>
+        Try(withStateBoxVersions(ValueSerializer.serialize(value))) match {
+          case Failure(_) => false
+          case Success(belowV3) =>
+            Try(withV6BlockVersions(ValueSerializer.serialize(value))).fold(_ => true, !util.Arrays.equals(belowV3, _))
+        }
+    }
+    tx.inputs.exists(_.spendingProof.extension.values.valuesIterator.exists(differs)) ||
+      tx.outputCandidates.exists(_.additionalRegisters.valuesIterator.exists(differs))
+  }
+
+  private def mayHoldBox(tpe: SType): Boolean = tpe match {
+    case SBox => true
+    case c: SCollectionType[_] => mayHoldBox(c.elemType)
+    case t: STuple => t.items.exists(mayHoldBox)
+    case o: SOption[_] => mayHoldBox(o.elemType)
+    case _ => false
+  }
 
   private def unresolvedIndices(inputs: IndexedSeq[BoxId], resolvedInputs: IndexedSeq[ErgoBox]): IndexedSeq[Int] =
     inputs.zipWithIndex.filterNot(i => resolvedInputs.exists(bx => util.Arrays.equals(bx.id, i._1))).map(_._2)

@@ -392,6 +392,18 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                     new ProcessingOutcome.Declined(exc, validationStartTime))
                 }
 
+                // Valid by consensus, but nodes that compute the transaction's id below ErgoTree version 3 get
+                // another id than a block holding it, and the UTXO set keys its outputs by the form below 3.
+                if (ErgoTransaction.hasVersionDependentValues(tx)) {
+                  log.info(s"Mempool rejecting transaction with version-dependent register or extension values: ${tx.id}")
+                  val exc = new Exception("Mempool policy declines a transaction whose register or context " +
+                    "extension values serialize differently by ErgoTree version")
+                  // Rebuilt directly, rather than via `this.invalidate`, for the same reason
+                  // as the re-emission prefilter above.
+                  return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
+                    new ProcessingOutcome.Declined(exc, validationStartTime))
+                }
+
                 // added in 6.0 to check now versioned serializers
                 // as having unparseable outputs is okay per protocol rules, but in some cases in 6.0
                 // tree deserialization fails with versioning issues (eg when tree version > activated version),

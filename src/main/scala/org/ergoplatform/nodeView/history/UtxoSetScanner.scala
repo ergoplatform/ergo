@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.core.versionToBytes
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.UtxoSetScanner._
@@ -80,15 +81,23 @@ class UtxoSetScanner(nodeView: ActorRef, depth: Int = MainnetManifestDepth) exte
     }.getOrElse((0, 0))
 
   /**
+    * @return version of the UTXO state the saved progress was counted on, empty if none was saved
+    */
+  private def readProgressVersion(): Array[Byte] =
+    historyStorage.getIndex(utxoSetScanProgressKey).map(_.drop(8)).getOrElse(Array.emptyByteArray)
+
+  /**
     * Persists scanner progress to history storage.
     *
     * @param current - number of subtrees scanned so far
     * @param total   - total number of subtrees to scan
+    * @param version - version of the UTXO state the subtrees were counted on, empty when no subtree is scanned yet
     */
-  private def writeProgress(current: Int, total: Int): Unit = {
-    val buffer: ByteBuffer = ByteBuffer.allocate(8)
+  private def writeProgress(current: Int, total: Int, version: Array[Byte] = Array.emptyByteArray): Unit = {
+    val buffer: ByteBuffer = ByteBuffer.allocate(8 + version.length)
     buffer.putInt(current)
     buffer.putInt(total)
+    buffer.put(version)
     historyStorage.insert(Array((utxoSetScanProgressKey, buffer.array)), Array.empty[BlockSection])
   }
 
@@ -98,17 +107,22 @@ class UtxoSetScanner(nodeView: ActorRef, depth: Int = MainnetManifestDepth) exte
     * @param wallet     - wallet handle
     * @param current    - current subtree count after this batch
     * @param scanHeight - height of the UTXO state being scanned
+    * @param version    - version of the UTXO state being scanned
     * @param offset     - how far `current` was moved past the subtrees actually visited (shallow tree), 0 otherwise
     * @return whether the wallet scanned the whole batch
     */
-  private def sendBufferToWallet(wallet: ErgoWallet, current: Int, scanHeight: Int, offset: Int = 0): Boolean = {
+  private def sendBufferToWallet(wallet: ErgoWallet,
+                                 current: Int,
+                                 scanHeight: Int,
+                                 version: Array[Byte],
+                                 offset: Int = 0): Boolean = {
     // every subtree counted so far is in this batch: none was skipped by a resume and no batch was sent before it
     val fromStart = current - offset == chunkBuffer.size
     val scanned = wallet.scanUtxoSnapshot(
       ScanBoxesFromUtxoSnapshot(chunkBuffer.toVector, current, totalSubtrees, scanHeight, fromStart))
     val complete = scanned == current
     // on a failure, record the real position in the tree, so the next scan resumes at the failed subtree
-    writeProgress(if (complete) current else scanned - offset, totalSubtrees)
+    writeProgress(if (complete) current else scanned - offset, totalSubtrees, version)
     chunkBuffer.clear()
     complete
   }
@@ -131,6 +145,15 @@ class UtxoSetScanner(nodeView: ActorRef, depth: Int = MainnetManifestDepth) exte
     if (!initialized) // wallet is not initialized
       return
 
+    // The saved count is a position in the tree it was counted on. On another UTXO set the subtrees before that
+    // position are not the ones scanned, and the wallet (at height 0 during a scan) was not shown the blocks applied
+    // since: a box they spent stays in the registry, a box they created before the position is never scanned.
+    val version = versionToBytes(state.version)
+    if (current > 0 && !java.util.Arrays.equals(readProgressVersion(), version)) {
+      log.info(s"UTXO set changed after $current of $total subtrees were scanned, starting the scan over at ${state.version}")
+      current = 0
+    }
+
     val scanHeight = state.stateContext.currentHeight
     log.info(s"Starting UTXO set snapshot scan for $total chunks at height $scanHeight")
 
@@ -141,7 +164,7 @@ class UtxoSetScanner(nodeView: ActorRef, depth: Int = MainnetManifestDepth) exte
         // Flush a full 32-subtree batch only when another subtree follows, keeping the last subtree
         // for the final flush so it receives `total` and records `scanHeight` even on shallow trees.
         if (chunkBuffer.size == 32) {
-          failed = !sendBufferToWallet(wallet, current, scanHeight)
+          failed = !sendBufferToWallet(wallet, current, scanHeight, version)
         }
         if (!failed) {
           current += 1
@@ -166,7 +189,7 @@ class UtxoSetScanner(nodeView: ActorRef, depth: Int = MainnetManifestDepth) exte
 
     // flush remaining data, if any
     if (chunkBuffer.nonEmpty) {
-      if (!sendBufferToWallet(wallet, current, scanHeight, offset)) {
+      if (!sendBufferToWallet(wallet, current, scanHeight, version, offset)) {
         log.error("Wallet failed to scan a UTXO set subtree; the scan resumes from it on the next scan request")
         return
       }

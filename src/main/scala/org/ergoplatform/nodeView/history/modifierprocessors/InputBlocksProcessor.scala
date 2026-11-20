@@ -323,7 +323,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       */
     def bestTip: Option[ModifierId] = {
       if (bestIndex != -1) {
-        forks(bestIndex).chain.lastOption
+        forks(bestIndex).tip
       } else None
     }
 
@@ -535,8 +535,27 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       }
 
+      // At the best processed depth, prefer the longest fork extending the current best tip
+      // whose next unprocessed block is the arriving one ("first complete body wins").
+      val currentBestDepth = this.bestDepth
+      val currentBestTip   = this.bestTip
+      var extendingBestLen   = -1
+      var extendingBestIndex = -1
+      (0 until forks.length).foreach { c =>
+        val f = forks(c)
+        if (f.processedIndex == currentBestDepth &&
+            f.tip == currentBestTip &&
+            f.firstToComplete().contains(ib.id) &&
+            f.chain.length > extendingBestLen) {
+          extendingBestLen   = f.chain.length
+          extendingBestIndex = c
+        }
+      }
+
       // Determine the best fork index (prefer processed blocks over longest chain)
-      val bestIndex = if (this.bestIndex == -1) {
+      val bestIndex = if (extendingBestIndex != -1) {
+        extendingBestIndex
+      } else if (this.bestIndex == -1) {
         this.longestIndex
       } else {
         this.bestIndex
@@ -570,7 +589,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         needed
       }
 
-      if (longestIndex != bestIndex && switchNeeded(ib.id)) { // forking case
+      if (extendingBestIndex == -1 && longestIndex != bestIndex && switchNeeded(ib.id)) { // forking case
         log.info(s"Performing fork switch from fork ${bestIndex} to fork ${longestIndex}")
 
         val currentFork = forks(bestIndex)  // Current best fork (to be abandoned)

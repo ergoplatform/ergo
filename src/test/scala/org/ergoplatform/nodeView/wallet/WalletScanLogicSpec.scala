@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
-import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
+import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions, scanSnapshotBoxes}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
@@ -328,6 +328,47 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
         }
       } finally reopened.close()
     } finally deleteRecursive(directory)
+  }
+
+  property("scanSnapshotBoxes") {
+    withVersionedStore(10) { store =>
+      val walletVars = walletVarsGen.sample.get
+      var registry = new WalletRegistry(store)(settings.walletSettings)
+      var off = OffChainRegistry.empty
+      var filterOpt: Option[com.google.common.hash.BloomFilter[Array[Byte]]] = None
+
+      forAll(trackedTransactionGen) { trackedTransaction =>
+        val subtreeId1 = modIdGen.sample.get
+        val subtreeId2 = modIdGen.sample.get
+        val snapshotHeight = 42
+
+        val regBalanceBefore = registry.fetchDigest().walletBalance
+        val offBalanceBefore = off.digest.walletBalance
+
+        val allOutputs = trackedTransaction.tx.outputs
+        val (chunk1, chunk2) = allOutputs.splitAt(allOutputs.size / 2)
+
+        // Intermediate chunk (fullHeight = 0)
+        val (r1, o1, f1) =
+          scanSnapshotBoxes(registry, off, walletVars, chunk1, subtreeId1, filterOpt, None, WalletProfile.User, fullHeight = 0).get
+        r1.fetchDigest().height shouldBe 0
+        o1.digest.height shouldBe 0
+
+        // Final chunk (fullHeight = snapshotHeight)
+        val (r2, o2, f2) =
+          scanSnapshotBoxes(r1, o1, walletVars, chunk2, subtreeId2, Some(f1), None, WalletProfile.User, fullHeight = snapshotHeight).get
+
+        val expectedAdded = trackedTransaction.paymentValues.sum
+        r2.fetchDigest().walletBalance shouldBe (regBalanceBefore + expectedAdded)
+        r2.fetchDigest().height shouldBe snapshotHeight
+        o2.digest.walletBalance shouldBe (offBalanceBefore + expectedAdded)
+        o2.digest.height shouldBe snapshotHeight
+
+        registry = r2
+        off = o2
+        filterOpt = Some(f2)
+      }
+    }
   }
 
 }

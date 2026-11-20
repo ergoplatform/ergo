@@ -38,6 +38,21 @@ object ErgoWalletActorMessages {
   // Publicly available signals for the wallet actor
 
   /**
+   * Scan AVL subtrees containing UTXOs extracted from the UTXO set snapshot
+   * @param subtrees   - AVL subtrees `(subtreeId, boxes)` to scan
+   * @param current    - 1-based index of the last subtree in this batch
+   * @param total      - total number of subtrees in the UTXO set scan
+   * @param fullHeight - height of the UTXO state being scanned (applied when `current == total`)
+   * @param fromStart  - whether the batch begins with the first subtree of the UTXO set; the wallet then empties
+   *                     its registry before scanning, so that nothing left by an earlier scan is kept or counted twice
+   */
+  final case class ScanBoxesFromUtxoSnapshot(subtrees: Seq[(ModifierId, Array[ErgoBox])],
+                                             current: Int,
+                                             total: Int,
+                                             fullHeight: Int = 0,
+                                             fromStart: Boolean = false)
+
+  /**
    * Command to scan offchain transaction
    *
    * @param tx - offchain transaction

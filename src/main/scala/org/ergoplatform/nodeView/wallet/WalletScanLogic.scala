@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import com.google.common.hash.BloomFilter
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
@@ -164,6 +165,66 @@ object WalletScanLogic extends ScorexLogging {
       }
     }
 
+    updateRegistryAndOffchain(registry, offChainRegistry, scanRes, blockId, height, outputsFilter)
+  }
+
+  /**
+    * Updates wallet database by scanning and processing boxes from a UTXO set snapshot subtree.
+    *
+    * @param registry            - versioned wallet database which is tracking on-chain state
+    * @param offChainRegistry    - in-memory snapshot of current state, including off-chain transactions
+    * @param walletVars          - current wallet state
+    * @param boxes               - boxes from the UTXO set snapshot subtree
+    * @param subtreeId           - modifier id of the subtree
+    * @param cachedOutputsFilter - Bloom filter for previously created outputs
+    * @param dustLimit           - optional dust limit for filtering low-value outputs
+    * @param walletProfile       - wallet profile configuration
+    * @param fullHeight          - height to record in the wallet digest (0 during intermediate chunks, snapshot height on completion)
+    * @return updated wallet database, offchain snapshot and the Bloom filter for wallet outputs
+    */
+  def scanSnapshotBoxes(registry: WalletRegistry,
+                        offChainRegistry: OffChainRegistry,
+                        walletVars: WalletVars,
+                        boxes: Seq[ErgoBox],
+                        subtreeId: ModifierId,
+                        cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
+                        dustLimit: Option[Long],
+                        walletProfile: WalletProfile,
+                        fullHeight: Int = 0): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+    val outputsFilter = cachedOutputsFilter.getOrElse {
+      val bf = WalletCache.emptyFilter(walletProfile.outputsFilterSize)
+
+      registry.allUnspentBoxes().foreach { tb =>
+        bf.put(tb.box.id)
+      }
+      bf
+    }
+
+    val trackedBytes: Seq[Array[Byte]] = walletVars.trackedBytes
+    val miningScriptsBytes: Seq[Array[Byte]] = walletVars.miningScriptsBytes
+    val externalScans: Seq[Scan] = walletVars.externalScans
+    val Outputs = boxes.flatMap(box =>
+      filterWalletOutput(
+        box,
+        Some(box.creationHeight),
+        dustLimit,
+        walletVars,
+        trackedBytes,
+        miningScriptsBytes,
+        externalScans
+      )
+    )
+    Outputs.foreach(out => outputsFilter.put(out.box.id))
+    val scanRes = ScanResults(Outputs, ArraySeq.empty, ArraySeq.empty)
+    updateRegistryAndOffchain(registry, offChainRegistry, scanRes, subtreeId, fullHeight, outputsFilter)
+  }
+
+  private def updateRegistryAndOffchain(registry: WalletRegistry,
+                                        offChainRegistry: OffChainRegistry,
+                                        scanRes: ScanResults,
+                                        blockId: ModifierId,
+                                        height: Int,
+                                        outputsFilter: BloomFilter[Array[Byte]]): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
     // function effects: updating registry and offchainRegistry datasets
     registry.updateOnBlock(scanRes, blockId, height)
       .map { _ =>
@@ -189,73 +250,82 @@ object WalletScanLogic extends ScorexLogging {
     val miningScriptsBytes: Seq[Array[Byte]] = walletVars.miningScriptsBytes
     val externalScans: Seq[Scan] = walletVars.externalScans
 
-    tx.outputs.flatMap { bx  =>
+    tx.outputs.flatMap(bx =>
+      filterWalletOutput(bx, inclusionHeight, dustLimit, walletVars, trackedBytes, miningScriptsBytes, externalScans)
+    )
+  }
 
-      // First, we check apps triggered by the tx output
-      val appsTriggered =
-        externalScans
-          .filter(_.trackingRule.filter(bx))
-          .map(app => app.scanId -> app.walletInteraction)
+  private def filterWalletOutput(bx: ErgoBox,
+                                 inclusionHeight: Option[Int],
+                                 dustLimit: Option[Long],
+                                 walletVars: WalletVars,
+                                 trackedBytes: Seq[Array[Byte]],
+                                 miningScriptsBytes: Seq[Array[Byte]],
+                                 externalScans: Seq[Scan]): Option[TrackedBox] = {
+    // First, we check apps triggered by the tx output
+    val appsTriggered =
+      externalScans
+        .filter(_.trackingRule.filter(bx))
+        .map(app => app.scanId -> app.walletInteraction)
 
-      val boxScript = bx.propositionBytes
+    val boxScript = bx.propositionBytes
 
-      // then check whether Bloom filter built on top of payment & mining scripts of the p2pk-wallet
-      val statuses: Set[ScanId] = if (walletVars.scriptsFilter.mightContain(boxScript)) {
+    // then check whether Bloom filter built on top of payment & mining scripts of the p2pk-wallet
+    val statuses: Set[ScanId] = if (walletVars.scriptsFilter.mightContain(boxScript)) {
 
-        // first, we are checking mining script
-        val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
+      // first, we are checking mining script
+      val miningIncomeTriggered = miningScriptsBytes.exists(ms => boxScript.sameElements(ms))
 
-        val prePaymentStatuses = if (miningIncomeTriggered) {
-          val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
-            MiningScanId -> ScanWalletInteraction.Off // scripts are different, so off is kinda overkill
-          } else {
-            //tweak for tests
-            PaymentsScanId -> ScanWalletInteraction.Off
-          }
-          appsTriggered :+ miningStatus
+      val prePaymentStatuses = if (miningIncomeTriggered) {
+        val miningStatus: (ScanId, ScanWalletInteraction.Value) = if (walletVars.settings.miningRewardDelay > 0) {
+          MiningScanId -> ScanWalletInteraction.Off // scripts are different, so off is kinda overkill
         } else {
-          appsTriggered
+          //tweak for tests
+          PaymentsScanId -> ScanWalletInteraction.Off
         }
-
-        if (prePaymentStatuses.nonEmpty &&
-          !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
-          // if other scans intercept the box, and the scans are not sharing the box,
-          // then the box is not being tracked by the p2pk-wallet
-          prePaymentStatuses.map(_._1).toSet
-        } else {
-          //check whether payment is triggered (Bloom filter has false positives)
-          val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
-
-          val otherIds = prePaymentStatuses.map(_._1).toSet
-          if (paymentsTriggered) {
-            Set(PaymentsScanId) ++ otherIds
-          } else {
-            otherIds
-          }
-        }
+        appsTriggered :+ miningStatus
       } else {
-        val appScans = appsTriggered.map(_._1).toSet
-
-        // Add p2pk-wallet if there's a scan enforcing that
-        if (appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)) {
-          appScans ++ Set(PaymentsScanId)
-        } else {
-          appScans
-        }
+        appsTriggered
       }
 
-      if (statuses.nonEmpty) {
-        if (dustLimit.exists(bx.value <= _)){
-          // filter out boxes with value that is considered dust
-          None
-        } else {
-          val tb = TrackedBox(tx.id, bx.index, inclusionHeight, None, None, bx, statuses)
-          log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
-          Some(tb)
-        }
+      if (prePaymentStatuses.nonEmpty &&
+        !prePaymentStatuses.exists(t => ScanWalletInteraction.interactingWithWallet(t._2))) {
+        // if other scans intercept the box, and the scans are not sharing the box,
+        // then the box is not being tracked by the p2pk-wallet
+        prePaymentStatuses.map(_._1).toSet
       } else {
+        //check whether payment is triggered (Bloom filter has false positives)
+        val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
+
+        val otherIds = prePaymentStatuses.map(_._1).toSet
+        if (paymentsTriggered) {
+          Set(PaymentsScanId) ++ otherIds
+        } else {
+          otherIds
+        }
+      }
+    } else {
+      val appScans = appsTriggered.map(_._1).toSet
+
+      // Add p2pk-wallet if there's a scan enforcing that
+      if (appsTriggered.exists(_._2 == ScanWalletInteraction.Forced)) {
+        appScans ++ Set(PaymentsScanId)
+      } else {
+        appScans
+      }
+    }
+
+    if (statuses.nonEmpty) {
+      if (dustLimit.exists(bx.value <= _)) {
+        // filter out boxes with value that is considered dust
         None
+      } else {
+        val tb = TrackedBox(bx.transactionId, bx.index, inclusionHeight, None, None, bx, statuses)
+        log.debug("New tracked box: " + tb.boxId, " scans: " + tb.scans)
+        Some(tb)
       }
+    } else {
+      None
     }
   }
 

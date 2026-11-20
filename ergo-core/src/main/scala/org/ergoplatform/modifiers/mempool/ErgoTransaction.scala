@@ -247,17 +247,16 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         // reemission check logic below
         var reemissionSpending = false // flag indicating that inputs have re-emission tokens
         boxesToSpend.foreach { box =>
+          val isEmissionNftBox = emissionNftId.nonEmpty && (
+            if (height == activationHeight) {
+              (box eq boxesToSpend.head) && boxesToSpend.lift(1).exists(_.tokens.contains(emissionNftId))
+            } else {
+              box.tokens.contains(emissionNftId)
+            }
+          )
           // checking EIP-27 rules for emission box
-          // for efficiency, skip boxes with less than 100K ERG
-          // secure, as charging emission box will be stopped
-          // before 100K ERG left in the emission box
-          // todo: for efficiency, we can raise the bar probably
-          if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
-            // on activation height, emissionNft is not in emission box yet, but in injection box
-            // injection box index (1) is enforced by injection box contract
-            if (box.tokens.contains(emissionNftId) ||
-              (height == activationHeight && boxesToSpend(1).tokens.contains(emissionNftId))) {
-
+          if (isEmissionNftBox) {
+            if (box.value > emissionRules.settings.oneEpochReduction) {
               // in this branch, we are checking spending of re-emission tokens from the emission boxes
 
               // if emission contract NFT is in the input, remission tokens should be there also
@@ -293,14 +292,27 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
               val properReemissionRewardPart = reemissionRules.reemissionForHeight(height, emissionRules)
               require(rewardsTokensOut == properReemissionRewardPart, "Rewards out condition violated")
             } else {
-              // this path can be removed after EIP-27 activation in 5.0
-              // that is not so easy though, see https://github.com/ergoplatform/ergo/issues/1736
-              if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
-                //we require emission contract NFT and reemission token to be presented in emission output
-                val emissionOutTokens = outputCandidates(0).tokens
-                require(emissionOutTokens.contains(emissionNftId))
-                require(emissionOutTokens.contains(reemissionTokenId))
-              }
+              // Final spend depleting the emission box (`lastCoins` branch): no re-emission tokens
+              // may be issued or carried into outputs; surplus unissued tokens are burned with the box.
+              require(
+                reemissionRules.reemissionForHeight(height, emissionRules) == 0L,
+                "Cannot deplete emission box while re-emission charging is active"
+              )
+              require(
+                outputCandidates.forall(out =>
+                  !out.tokens.contains(reemissionTokenId) && !out.tokens.contains(emissionNftId)
+                ),
+                "Outputs contain emission NFT or reemission token on final emission box spend"
+              )
+            }
+          } else if (box.value > 100000 * EmissionRules.CoinsInOneErgo) {
+            // this path can be removed after EIP-27 activation in 5.0
+            // that is not so easy though, see https://github.com/ergoplatform/ergo/issues/1736
+            if (height >= activationHeight && box.ergoTree == chainSettings.monetary.emissionBoxProposition) {
+              //we require emission contract NFT and reemission token to be presented in emission output
+              val emissionOutTokens = outputCandidates(0).tokens
+              require(emissionOutTokens.contains(emissionNftId))
+              require(emissionOutTokens.contains(reemissionTokenId))
             }
           } else if (box.tokens.contains(reemissionTokenId) && height > activationHeight) {
             // reemission tokens spent after EIP-27 activation

@@ -197,7 +197,12 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   /**
     * Close wallet storage database
     */
+  @volatile private var closed: Boolean = false
+
+  private[wallet] def isClosed: Boolean = closed
+
   def close(): Unit = {
+    closed = true
     store.close()
   }
 

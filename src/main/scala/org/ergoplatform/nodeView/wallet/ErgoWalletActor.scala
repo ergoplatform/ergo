@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
@@ -100,6 +101,10 @@ class ErgoWalletActor(settings: ErgoSettings,
           sender() ! Success(mnemonic)
         case Failure(t) =>
           walletPass.erase()
+          val recoveredState = recoverClosedWalletHandles(state)
+          if (recoveredState ne state) {
+            context.become(loadedWallet(recoveredState))
+          }
           val f = wrapLegalExc(t) // getting nicer message for illegal key size exception
           log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
           sender() ! f
@@ -533,6 +538,33 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   override def receive: Receive = emptyWallet
+
+  private def recoverClosedWalletHandles(current: ErgoWalletState): ErgoWalletState = {
+    val withRegistry =
+      if (current.registry.isClosed) {
+        WalletRegistry(settings).fold(
+          e => {
+            log.warn(s"Unable to reopen wallet registry after failed initialization: ${e.getMessage}")
+            current
+          },
+          reg => current.copy(registry = reg)
+        )
+      } else {
+        current
+      }
+
+    if (withRegistry.storage.isClosed) {
+      Try(WalletStorage.readOrCreate(settings)).fold(
+        e => {
+          log.warn(s"Unable to reopen wallet storage after failed initialization: ${e.getMessage}")
+          withRegistry
+        },
+        stor => withRegistry.copy(storage = stor)
+      )
+    } else {
+      withRegistry
+    }
+  }
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {

@@ -195,4 +195,145 @@ class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
     }
   }
 
+  private def replaceSubDir(srcDir: File, dstDir: File): Unit = {
+    def deleteRecursively(f: File): Unit = {
+      Option(f.listFiles()).foreach(_.foreach(deleteRecursively))
+      f.delete()
+    }
+    def copyRecursively(src: File, dst: File): Unit = {
+      if (src.isDirectory) {
+        dst.mkdirs()
+        Option(src.listFiles()).foreach(_.foreach(child => copyRecursively(child, new File(dst, child.getName))))
+      } else {
+        java.nio.file.Files.copy(src.toPath, dst.toPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+      }
+    }
+    deleteRecursively(dstDir)
+    copyRecursively(srcDir, dstDir)
+  }
+
+  // #2859: process stop inside LDBVersionedStore.update (after ldb_undo write, before ldb_main write)
+  property("persistent prover restarts after a stop between ldb_undo and ldb_main writes in update") {
+    val dir = createTempDir
+    val backupDir = createTempDir
+
+    val (firstDigest, committedDigest) = withProverAt(dir, 10) { (_, prover) =>
+      insertRandom(prover, 1)
+      val d1 = prover.digest
+      insertRandom(prover, 1)
+      (d1, prover.digest)
+    }
+    replaceSubDir(new File(dir, "ldb_main"), new File(backupDir, "ldb_main"))
+
+    val uncommittedDigest = withProverAt(dir, 10) { (_, prover) =>
+      insertRandom(prover, 1)
+      prover.digest
+    }
+    // Simulate a stop after ldb_undo persisted uncommittedDigest and before ldb_main persisted its batch
+    replaceSubDir(new File(backupDir, "ldb_main"), new File(dir, "ldb_main"))
+
+    withProverAt(dir, 10) { (store, restored) =>
+      restored.digest.toSeq shouldBe committedDigest.toSeq
+      store.lastVersionID.map(_.toSeq) shouldBe Some(committedDigest.toSeq)
+      store.versionIdExists(uncommittedDigest) shouldBe false
+      store.versionIdExists(firstDigest) shouldBe true
+      insertRandom(restored, 1)
+      restored.rollback(firstDigest) shouldBe 'success
+      restored.digest.toSeq shouldBe firstDigest.toSeq
+    }
+  }
+
+  property("store recovers from a stop during the first update on an empty store") {
+    val dir = createTempDir
+    val backupDir = createTempDir
+    val vFirst = written("first", 1).head
+    val vNext = written("next", 1).head
+
+    withVersionedStore(10, dir)(_ => ())
+    replaceSubDir(new File(dir, "ldb_main"), new File(backupDir, "ldb_main"))
+
+    withVersionedStore(10, dir)(store => store.update(vFirst.id, Seq.empty, Seq(keyA -> vFirst.value)).get)
+    replaceSubDir(new File(backupDir, "ldb_main"), new File(dir, "ldb_main"))
+
+    withVersionedStore(10, dir) { store =>
+      store.lastVersionID shouldBe None
+      store.get(keyA) shouldBe None
+      store.versionIdExists(vFirst.id) shouldBe false
+      store.update(vNext.id, Seq.empty, Seq(keyA -> vNext.value)).get
+      store.lastVersionID.map(_.toSeq) shouldBe Some(vNext.id.toSeq)
+      store.get(keyA).map(_.toSeq) shouldBe Some(vNext.value.toSeq)
+    }
+  }
+
+  property("store recovers from a stop inside update after a keepVersions = 0 period") {
+    val dir = createTempDir
+    val backupDir = createTempDir
+    val versions = written("kz", 3)
+
+    withVersionedStore(0, dir)(writeVersions(_, versions.take(2)))
+    // Initialize committed metadata on reopen with keepVersions > 0, then snapshot ldb_main at versions(1)
+    withVersionedStore(10, dir)(_ => ())
+    replaceSubDir(new File(dir, "ldb_main"), new File(backupDir, "ldb_main"))
+
+    withVersionedStore(10, dir)(writeVersions(_, versions.drop(2)))
+    replaceSubDir(new File(backupDir, "ldb_main"), new File(dir, "ldb_main"))
+
+    withVersionedStore(10, dir) { store =>
+      store.lastVersionID.map(_.toSeq) shouldBe Some(versions(1).id.toSeq)
+      store.get(keyA).map(_.toSeq) shouldBe Some(versions(1).value.toSeq)
+      store.versionIdExists(versions(2).id) shouldBe false
+    }
+  }
+
+  property("persistent prover restarts after a stop between ldb_main and ldb_undo writes in rollbackTo") {
+    val dir = createTempDir
+    val backupDir = createTempDir
+
+    val (targetDigest, _, latestDigest) = withProverAt(dir, 10) { (_, prover) =>
+      insertRandom(prover, 1)
+      val d1 = prover.digest
+      insertRandom(prover, 1)
+      val d2 = prover.digest
+      insertRandom(prover, 1)
+      (d1, d2, prover.digest)
+    }
+    replaceSubDir(new File(dir, "ldb_undo"), new File(backupDir, "ldb_undo"))
+
+    withProverAt(dir, 10) { (_, prover) =>
+      prover.rollback(targetDigest).get
+    }
+    // Simulate a stop inside rollbackTo after ldb_main rolled back to targetDigest and before ldb_undo deleted d2..latestDigest
+    replaceSubDir(new File(backupDir, "ldb_undo"), new File(dir, "ldb_undo"))
+
+    withProverAt(dir, 10) { (store, restored) =>
+      restored.digest.toSeq shouldBe targetDigest.toSeq
+      store.lastVersionID.map(_.toSeq) shouldBe Some(targetDigest.toSeq)
+      store.versionIdExists(latestDigest) shouldBe false
+      insertRandom(restored, 1)
+      val newDigest = restored.digest
+      store.versionIdExists(newDigest) shouldBe true
+      restored.rollback(targetDigest) shouldBe 'success
+    }
+  }
+
+  property("legacy store without committed_state_key preserves undo versions after a keepVersions = 0 period") {
+    val dir = createTempDir
+    val versions = written("legacy", 4)
+    val committedStateKey = scorex.crypto.hash.Blake2b256("committed_state")
+
+    withVersionedStore(0, dir)(writeVersions(_, versions.take(2)))
+    withVersionedStore(10, dir) { store =>
+      writeVersions(store, versions.drop(2))
+      // Remove committed_state_key directly to emulate a pre-#2859 store directory on disk
+      store.db.delete(committedStateKey)
+    }
+
+    withVersionedStore(10, dir) { store =>
+      store.lastVersionID.map(_.toSeq) shouldBe Some(versions.last.id.toSeq)
+      store.get(keyA).map(_.toSeq) shouldBe Some(versions.last.value.toSeq)
+      store.rollbackTo(versions(2).id) shouldBe 'success
+      store.get(keyA).map(_.toSeq) shouldBe Some(versions(2).value.toSeq)
+    }
+  }
+
 }

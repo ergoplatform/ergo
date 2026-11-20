@@ -104,4 +104,73 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     store.update(version3, Seq.empty, Seq(k1 -> v1)).get
     store.versionIdExists(version3) shouldBe true
    }
+
+  property("reconcile interrupted update and rollbackTo across reopen") {
+    def copyDir(src: java.io.File, dst: java.io.File): Unit = {
+      Option(dst.listFiles()).foreach(_.foreach { f =>
+        Option(f.listFiles()).foreach(_.foreach(_.delete()))
+        f.delete()
+      })
+      dst.mkdirs()
+      Option(src.listFiles()).foreach(_.foreach { child =>
+        val target = new java.io.File(dst, child.getName)
+        if (child.isDirectory) copyDir(child, target)
+        else java.nio.file.Files.copy(child.toPath, target.toPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+      })
+    }
+
+    val isolatedDir = getRandomTempDir
+    val backupDir = getRandomTempDir
+    val k = Longs.toByteArray(42L)
+    val v1 = Longs.toByteArray(101L)
+    val v2 = Longs.toByteArray(202L)
+    val v3 = Longs.toByteArray(303L)
+
+    val s1 = new LDBVersionedStore(isolatedDir, 10)
+    try {
+      s1.update(v1, Seq.empty, Seq(k -> v1)).get
+      s1.update(v2, Seq.empty, Seq(k -> v2)).get
+    } finally {
+      s1.close()
+    }
+    copyDir(new java.io.File(isolatedDir, "ldb_main"), new java.io.File(backupDir, "ldb_main"))
+
+    val s2 = new LDBVersionedStore(isolatedDir, 10)
+    try {
+      s2.update(v3, Seq.empty, Seq(k -> v3)).get
+    } finally {
+      s2.close()
+    }
+    // Simulate stop after ldb_undo persisted v3 and before ldb_main persisted v3
+    copyDir(new java.io.File(backupDir, "ldb_main"), new java.io.File(isolatedDir, "ldb_main"))
+
+    val s3 = new LDBVersionedStore(isolatedDir, 10)
+    try {
+      s3.lastVersionID.map(_.toSeq) shouldBe Some(v2.toSeq)
+      s3.get(k).map(_.toSeq) shouldBe Some(v2.toSeq)
+      s3.versionIdExists(v3) shouldBe false
+      s3.versionIdExists(v1) shouldBe true
+    } finally {
+      s3.close()
+    }
+
+    // Now simulate stop inside rollbackTo(v1) after ldb_main updated and before ldb_undo pruned v2
+    copyDir(new java.io.File(isolatedDir, "ldb_undo"), new java.io.File(backupDir, "ldb_undo"))
+    val s4 = new LDBVersionedStore(isolatedDir, 10)
+    try {
+      s4.rollbackTo(v1).get
+    } finally {
+      s4.close()
+    }
+    copyDir(new java.io.File(backupDir, "ldb_undo"), new java.io.File(isolatedDir, "ldb_undo"))
+
+    val s5 = new LDBVersionedStore(isolatedDir, 10)
+    try {
+      s5.lastVersionID.map(_.toSeq) shouldBe Some(v1.toSeq)
+      s5.get(k).map(_.toSeq) shouldBe Some(v1.toSeq)
+      s5.versionIdExists(v2) shouldBe false
+    } finally {
+      s5.close()
+    }
+  }
 }

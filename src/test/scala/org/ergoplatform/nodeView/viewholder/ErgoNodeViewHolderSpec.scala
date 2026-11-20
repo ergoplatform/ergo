@@ -710,6 +710,36 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  private val t23a = TestCase("process genesis ordering block on empty history without requesting GenesisParentId") { fixture =>
+    import fixture._
+    if (stateType == Utxo && verifyTransactions) {
+      val (us, bh) = createUtxoState(fixture.settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+
+      val oba = OrderingBlockAnnouncement(
+        version = 1,
+        header = genesis.header,
+        nonBroadcastedTransactions = genesis.blockTransactions.txs,
+        broadcastedTransactionIds = Seq.empty,
+        extensionFields = genesis.extension.fields
+      )
+
+      subscribeEvents(classOf[SyntacticallySuccessfulModifier])
+      subscribeEvents(classOf[DownloadRequest])
+
+      nodeViewHolderRef ! ProcessOrderingBlock(oba)
+
+      val modMsg = testProbe.fishForMessage(5.seconds) {
+        case s: SyntacticallySuccessfulModifier if s.modifierId == genesis.header.id => true
+        case d: DownloadRequest if d.modifiersToFetch.get(Header.modifierTypeId).exists(_.contains(Header.GenesisParentId)) =>
+          fail("Should never request Header.GenesisParentId from peers")
+        case _ => false
+      }.asInstanceOf[SyntacticallySuccessfulModifier]
+      modMsg.modifierId shouldBe genesis.header.id
+      getHeightOf(genesis.header.id) shouldBe Some(1)
+    }
+  }
+
   private val t24 = TestCase("apply locally generated ordering block") { fixture =>
     import fixture._
     if (stateType == Utxo && verifyTransactions) {
@@ -1625,7 +1655,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
-  val inputBlockCases: List[TestCase] = List(t20, t21, t22, t23, t24, t25)
+  val inputBlockCases: List[TestCase] = List(t20, t21, t22, t23, t23a, t24, t25)
 
   NodeViewTestConfig.verifyTxConfigs.filter(_.stateType == StateType.Utxo).foreach { c =>
     inputBlockCases.foreach { t =>

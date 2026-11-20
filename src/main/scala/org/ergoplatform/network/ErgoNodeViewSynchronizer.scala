@@ -127,6 +127,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val declined = mutable.HashSet[ModifierId]()
 
   /**
+    * Sender of a requested `BlockTransactions` section that arrived before its header was in history and was dropped to
+    * `Unknown` until the header's block version is known. Once the header is applied, that sender is asked first before
+    * falling back to general download peers. Bounded by `MaxEarlyTxSenders`.
+    */
+  private val earlyTxSenders = mutable.LinkedHashMap.empty[ModifierId, ConnectedPeer]
+
+  /**
     * Counter which contains total cost of transactions entered mempool or rejected by it since last block processed.
     * Used to avoid sudden spikes in load, limiting transactions processing time and make it comparable to block's
     * processing time
@@ -595,7 +602,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         modifiersToDownload.foreach {
           case (modifierTypeId, modifierId) =>
             if (deliveryTracker.status(modifierId, modifierTypeId, Seq(history)) == ModifiersStatus.Unknown) {
-              requestBlockSection(modifierTypeId, Seq(modifierId), peer)
+              val targetPeer = if (modifierTypeId == BlockTransactions.modifierTypeId) {
+                earlyTxSenders.getOrElse(modifierId, peer)
+              } else {
+                peer
+              }
+              requestBlockSection(modifierTypeId, Seq(modifierId), targetPeer)
             }
         }
       } else {
@@ -649,6 +661,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (checksDone > 0 && modifierIds.length > 1) {
       log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
     }
+    if (modifierTypeId == BlockTransactions.modifierTypeId) {
+      modifierIds.foreach(earlyTxSenders.remove)
+    }
     val msg = Message(RequestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
     val stn = SendToNetwork(msg, SendToPeer(peer))
     networkControllerRef ! stn
@@ -694,26 +709,69 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
+  /**
+    * For `BlockTransactions` ids in `modifiersToFetch` whose section previously arrived before its header, ask the
+    * peer that delivered that early section first (up to `deliveryTracker.modifiersToDownload`) and return the
+    * remaining ids still to be downloaded from general block peers.
+    */
+  private def requestEarlyTxSendersFirst(
+    modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]
+  ): Map[NetworkObjectTypeId.Value, Seq[ModifierId]] = {
+    modifiersToFetch.get(BlockTransactions.modifierTypeId) match {
+      case Some(txsIds) if txsIds.nonEmpty && earlyTxSenders.nonEmpty =>
+        val limit = deliveryTracker.modifiersToDownload
+        if (limit <= 0) {
+          modifiersToFetch
+        } else {
+          val fromEarlySenders = txsIds.flatMap { mid =>
+            earlyTxSenders.get(mid).map(sender => mid -> sender)
+          }.take(limit)
+          if (fromEarlySenders.isEmpty) {
+            modifiersToFetch
+          } else {
+            val idsBySender = mutable.LinkedHashMap.empty[ConnectedPeer, mutable.ArrayBuffer[ModifierId]]
+            fromEarlySenders.foreach { case (mid, sender) =>
+              idsBySender.getOrElseUpdate(sender, mutable.ArrayBuffer.empty[ModifierId]) += mid
+            }
+            idsBySender.foreach { case (sender, ids) =>
+              requestBlockSection(BlockTransactions.modifierTypeId, ids.toSeq, sender)
+            }
+            val requestedSet = fromEarlySenders.map(_._1).toSet
+            val remainingTxIds = txsIds.filterNot(requestedSet.contains)
+            if (remainingTxIds.isEmpty) {
+              modifiersToFetch - BlockTransactions.modifierTypeId
+            } else {
+              modifiersToFetch.updated(BlockTransactions.modifierTypeId, remainingTxIds)
+            }
+          }
+        }
+      case _ =>
+        modifiersToFetch
+    }
+  }
+
   private def onDownloadRequest(historyReader: ErgoHistory): Receive = {
     case DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) =>
       log.debug(s"Downloading via DownloadRequest: $modifiersToFetch")
       if (modifiersToFetch.nonEmpty) {
-        requestDownload(
-          maxModifiers = deliveryTracker.modifiersToDownload,
-          minModifiersPerBucket,
-          maxModifiersPerBucket
-        )(getPeersForDownloadingBlocks) { _ =>
-          // leave block section ids only not touched before
-          modifiersToFetch.flatMap { case (tid, mids) =>
-            val updMids = mids.filter { mid =>
-              deliveryTracker.status(mid, tid, Seq(historyReader)) == ModifiersStatus.Unknown
-            }
-            if (updMids.isEmpty) {
-              None
-            } else {
-              Some(tid -> updMids)
-            }
+        // leave block section ids only not touched before
+        val unknownToFetch = modifiersToFetch.flatMap { case (tid, mids) =>
+          val updMids = mids.filter { mid =>
+            deliveryTracker.status(mid, tid, Seq(historyReader)) == ModifiersStatus.Unknown
           }
+          if (updMids.isEmpty) {
+            None
+          } else {
+            Some(tid -> updMids)
+          }
+        }
+        val remainingToFetch = requestEarlyTxSendersFirst(unknownToFetch)
+        if (remainingToFetch.nonEmpty) {
+          requestDownload(
+            maxModifiers = deliveryTracker.modifiersToDownload,
+            minModifiersPerBucket,
+            maxModifiersPerBucket
+          )(getPeersForDownloadingBlocks)(_ => remainingToFetch)
         }
       }
   }
@@ -1360,10 +1418,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // Any fatal failure is matched, not only `alreadyApplied`, on purpose: the node needs nothing from a copy of a
         // modifier it already holds, so the copy is dropped whichever rule rejects it.
         log.info(s"Modifier ${pmod.encodedId} is already in history, dropping the copy from $remote: ${e.getMessage}")
+        if (pmod.modifierTypeId == BlockTransactions.modifierTypeId) {
+          earlyTxSenders.remove(pmod.id)
+        }
         deliveryTracker.setHeld(pmod.id, pmod.modifierTypeId)
         false
       case Failure(e: MalformedModifierError) =>
         log.warn(s"Modifier ${pmod.encodedId} failed validation", e)
+        if (pmod.modifierTypeId == BlockTransactions.modifierTypeId) {
+          earlyTxSenders.remove(pmod.id)
+        }
         // The transaction section ID does not commit to blockVersion. A peer can send
         // wrong-version bytes under the correct ID, so keep that ID downloadable.
         val sameIdVersionMismatch = pmod match {
@@ -1382,10 +1446,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         false
       case Failure(_: RecoverableModifierError) if transactionHeaderMissing =>
-        // Wait for the header before caching an ID whose version cannot yet be checked.
+        // Wait for the header before caching an ID whose version cannot yet be checked; remember who sent the
+        // section so that once the header is applied we ask that peer first.
+        rememberEarlyTxSender(pmod.id, remote)
         deliveryTracker.setUnknown(pmod.id, pmod.modifierTypeId)
         false
       case _ =>
+        if (pmod.modifierTypeId == BlockTransactions.modifierTypeId) {
+          earlyTxSenders.remove(pmod.id)
+        }
         deliveryTracker.setReceived(pmod.id, pmod.modifierTypeId, remote)
         true
     }
@@ -1505,6 +1574,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
       txsInProcessing -= connectedPeer
+      val earlyIdsFromPeer = earlyTxSenders.collect { case (id, peer) if peer == connectedPeer => id }.toVector
+      earlyIdsFromPeer.foreach(earlyTxSenders.remove)
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -1527,6 +1598,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Number of transactions currently cached for later processing, exposed for tests
     */
   private[network] def txProcessingCacheSize: Int = txProcessingCache.size
+
+  /**
+    * Number of early `BlockTransactions` senders currently remembered, exposed for tests
+    */
+  private[network] def earlyTxSendersCount: Int = earlyTxSenders.size
+
+  private def rememberEarlyTxSender(txsId: ModifierId, sender: ConnectedPeer): Unit = {
+    earlyTxSenders.remove(txsId)
+    while (earlyTxSenders.size >= MaxEarlyTxSenders) {
+      earlyTxSenders.remove(earlyTxSenders.head._1)
+    }
+    earlyTxSenders.put(txsId, sender)
+  }
 
   /**
     * Whether a transaction of the peer may be sent to the mempool now: the peer is within its budget even when each of
@@ -1608,6 +1692,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (snapshotInfoNeeded) {
           requestSnapshotsInfo()
         } else {
+          if (earlyTxSenders.nonEmpty && deliveryTracker.modifiersToDownload > 0) {
+            val candidates = historyReader.nextModifiersToDownload(
+              deliveryTracker.modifiersToDownload,
+              downloadRequired(historyReader)
+            )
+            requestEarlyTxSendersFirst(candidates)
+          }
           requestDownload(
             maxModifiers = deliveryTracker.modifiersToDownload,
             minModifiersPerBucket,
@@ -1779,6 +1870,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       if (historyReader.fullBlockHeight > 0) {
         log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
         deliveryTracker.reset()
+        earlyTxSenders.clear()
       } else {
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
@@ -1889,6 +1981,11 @@ object ErgoNodeViewSynchronizer {
     * node, see `txAcceptanceFilter` in the class above.
     */
   private[network] val MaxDeclined = 1000
+
+  /**
+    * Max number of early `BlockTransactions` section senders remembered while waiting for their headers.
+    */
+  private[network] val MaxEarlyTxSenders = 400
 
   /**
     * Minimal cost charged to a peer for a transaction declined by the mempool (1000 cost units ~ 1 ms of CPU).

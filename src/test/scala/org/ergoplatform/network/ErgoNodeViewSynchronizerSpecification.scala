@@ -2605,4 +2605,305 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       invTxAndExpectRequest(announcerB, tx)
     }
   }
+
+  private def distinctDownloadPeer(handler: ActorRef, port: Int): ConnectedPeer = ConnectedPeer(
+    connectionIdGen.sample.get.copy(remoteAddress = new InetSocketAddress("127.0.0.1", port)),
+    handler,
+    Some(PeerInfo(defaultPeerSpec.copy(features = Seq(ModePeerFeature(
+      StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept))), System.currentTimeMillis()))
+  )
+
+  /**
+    * When requested `BlockTransactions` sections arrive before their headers are in history, `validateAndSetStatus`
+    * drops them back to `Unknown` until the header version is known. Once the headers are applied, the node asks the
+    * peer that delivered those sections first rather than picking another download peer that may not have the new
+    * blocks yet.
+    */
+  property("NodeViewSynchronizer: block transactions received before their header are requested from the sender first") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val stopProbe = TestProbe("EarlyTxStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      system.stop(synchronizerMockRef)
+      stopProbe.expectTerminated(synchronizerMockRef)
+
+      val holderProbe = TestProbe("EarlyTxHolderProbe")
+      val synchronizer = TestActorRef(new SynchronizerMock(
+        ncProbe.ref,
+        holderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker))
+      holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val blocks = genChain(9, hist, (Header.InitialVersion + 1).toByte)
+      val withParent = applyBlock(hist, blocks.head)
+      synchronizer ! ChangedHistory(withParent)
+      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val senderPeer = distinctDownloadPeer(pchProbe.ref, 41001)
+      val otherPeers = Seq(41002, 41003, 41004).map(distinctDownloadPeer(pchProbe.ref, _))
+      // `senderPeer` is not in Equal/Older download peers yet, while three Equal peers are available
+      syncTracker.updateStatus(senderPeer, org.ergoplatform.consensus.Younger, Some(blocks.head.header.height))
+      otherPeers.foreach(p => syncTracker.updateStatus(p, org.ergoplatform.consensus.Equal, Some(blocks.head.header.height)))
+
+      val earlyBlocks = blocks.tail
+      earlyBlocks.foreach { b =>
+        val txs = b.blockTransactions
+        deliveryTracker.setRequested(txs.modifierTypeId, txs.id, senderPeer)(_ => Cancellable.alreadyCancelled)
+        val modData = ModifiersData(txs.modifierTypeId, Map(txs.id -> txs.bytes))
+        synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(senderPeer))
+        eventually {
+          deliveryTracker.status(txs.id, txs.modifierTypeId, Seq.empty) shouldBe Unknown
+        }
+      }
+      synchronizer.underlyingActor.earlyTxSendersCount shouldBe earlyBlocks.size
+
+      val withHeaders = earlyBlocks.foldLeft(withParent)((h, b) => h.append(b.header).get._1)
+      synchronizer ! ChangedHistory(withHeaders)
+      val expectedIds = earlyBlocks.map(_.blockTransactions.id)
+      synchronizer ! ErgoNodeViewHolder.DownloadRequest(Map(BlockTransactions.modifierTypeId -> expectedIds))
+
+      val (requestedPeer, requestedIds) = ncProbe.fishForSpecificMessage(5.seconds) {
+        case SendToNetwork(msg, SendToPeer(to))
+            if msg.spec.messageCode == RequestModifierSpec.messageCode &&
+              msg.data.get.asInstanceOf[InvData].typeId == BlockTransactions.modifierTypeId =>
+          (to, msg.data.get.asInstanceOf[InvData].ids)
+      }
+      requestedPeer shouldBe senderPeer
+      requestedIds shouldBe expectedIds
+      eventually {
+        expectedIds.foreach { id =>
+          deliveryTracker.getRequestedInfo(BlockTransactions.modifierTypeId, id).map(_.peer) shouldBe Some(senderPeer)
+        }
+      }
+      synchronizer.underlyingActor.earlyTxSendersCount shouldBe 0
+
+      // Once `senderPeer` re-delivers with headers present, sections are validated and forwarded to the view holder
+      val redelivery = ModifiersData(
+        BlockTransactions.modifierTypeId,
+        earlyBlocks.map(b => b.blockTransactions.id -> b.blockTransactions.bytes).toMap
+      )
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(redelivery)), Some(senderPeer))
+      val forwarded = holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote](5.seconds)
+      forwarded.modifiers.map(_.id) should contain theSameElementsAs expectedIds
+    }
+  }
+
+  /**
+    * Remembered early senders must not stick if the sender disconnects before the header is applied, or if the sender
+    * delivers wrong-version bytes after being asked once the header is in history.
+    */
+  property("NodeViewSynchronizer: early block transactions sender falls back to other peers on disconnect or invalid re-delivery") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val stopProbe = TestProbe("EarlyTxFallbackStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      system.stop(synchronizerMockRef)
+      stopProbe.expectTerminated(synchronizerMockRef)
+
+      val holderProbe = TestProbe("EarlyTxFallbackHolderProbe")
+      val synchronizer = TestActorRef(new SynchronizerMock(
+        ncProbe.ref,
+        holderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker))
+      holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val blocks = genChain(3, hist, (Header.InitialVersion + 1).toByte)
+      val withParent = applyBlock(hist, blocks.head)
+      synchronizer ! ChangedHistory(withParent)
+      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val disconnectingSender = distinctDownloadPeer(pchProbe.ref, 42001)
+      val badSender = distinctDownloadPeer(pchProbe.ref, 42002)
+      val honestOtherPeer = distinctDownloadPeer(pchProbe.ref, 42003)
+      syncTracker.updateStatus(honestOtherPeer, org.ergoplatform.consensus.Equal, Some(blocks.head.header.height))
+
+      // 1) Sender disconnects before header is applied -> DownloadRequest asks honestOtherPeer instead
+      val block1 = blocks(1)
+      val txs1 = block1.blockTransactions
+      deliveryTracker.setRequested(txs1.modifierTypeId, txs1.id, disconnectingSender)(_ => Cancellable.alreadyCancelled)
+      synchronizer ! Message(
+        ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(txs1.modifierTypeId, Map(txs1.id -> txs1.bytes)))),
+        Some(disconnectingSender)
+      )
+      eventually {
+        deliveryTracker.status(txs1.id, txs1.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      synchronizer.underlyingActor.earlyTxSendersCount shouldBe 1
+
+      synchronizer ! DisconnectedPeer(disconnectingSender)
+      eventually {
+        synchronizer.underlyingActor.earlyTxSendersCount shouldBe 0
+      }
+
+      val withHeader1 = withParent.append(block1.header).get._1
+      synchronizer ! ChangedHistory(withHeader1)
+      synchronizer ! ErgoNodeViewHolder.DownloadRequest(Map(txs1.modifierTypeId -> Seq(txs1.id)))
+      val chosenAfterDisconnect = ncProbe.fishForSpecificMessage(5.seconds) {
+        case SendToNetwork(msg, SendToPeer(to))
+            if msg.spec.messageCode == RequestModifierSpec.messageCode &&
+              msg.data.get.asInstanceOf[InvData].ids.contains(txs1.id) =>
+          to
+      }
+      chosenAfterDisconnect shouldBe honestOtherPeer
+      eventually {
+        deliveryTracker.status(txs1.id, txs1.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+
+      // 2) Bad sender delivers wrong-version bytes early -> asked once after header, penalized on wrong re-delivery,
+      //    and subsequent download asks honestOtherPeer
+      val block2 = blocks(2)
+      val txs2 = block2.blockTransactions
+      val wrongBytes2 = txs2.copy(blockVersion = Header.Interpreter50Version, sizeOpt = None).bytes
+      deliveryTracker.setRequested(txs2.modifierTypeId, txs2.id, badSender)(_ => Cancellable.alreadyCancelled)
+      synchronizer ! Message(
+        ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(txs2.modifierTypeId, Map(txs2.id -> wrongBytes2)))),
+        Some(badSender)
+      )
+      eventually {
+        deliveryTracker.status(txs2.id, txs2.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+
+      val withHeader2 = withHeader1.append(block2.header).get._1
+      synchronizer ! ChangedHistory(withHeader2)
+      synchronizer ! ErgoNodeViewHolder.DownloadRequest(Map(txs2.modifierTypeId -> Seq(txs2.id)))
+      val firstAsk = ncProbe.fishForSpecificMessage(5.seconds) {
+        case SendToNetwork(msg, SendToPeer(to))
+            if msg.spec.messageCode == RequestModifierSpec.messageCode &&
+              msg.data.get.asInstanceOf[InvData].ids.contains(txs2.id) =>
+          to
+      }
+      firstAsk shouldBe badSender
+      eventually {
+        deliveryTracker.status(txs2.id, txs2.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+      synchronizer.underlyingActor.earlyTxSendersCount shouldBe 0
+
+      // Bad sender answers with wrong-version bytes again; penalized and id reset to Unknown
+      synchronizer ! Message(
+        ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(txs2.modifierTypeId, Map(txs2.id -> wrongBytes2)))),
+        Some(badSender)
+      )
+      ncProbe.fishForSpecificMessage(5.seconds) {
+        case PenalizePeer(addr, penalty) if addr == badSender.connectionId.remoteAddress => penalty
+      } shouldBe PenaltyType.MisbehaviorPenalty
+      eventually {
+        deliveryTracker.status(txs2.id, txs2.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+
+      // Next DownloadRequest falls back to honestOtherPeer
+      synchronizer ! ErgoNodeViewHolder.DownloadRequest(Map(txs2.modifierTypeId -> Seq(txs2.id)))
+      val secondAsk = ncProbe.fishForSpecificMessage(5.seconds) {
+        case SendToNetwork(msg, SendToPeer(to))
+            if msg.spec.messageCode == RequestModifierSpec.messageCode &&
+              msg.data.get.asInstanceOf[InvData].ids.contains(txs2.id) =>
+          to
+      }
+      secondAsk shouldBe honestOtherPeer
+    }
+  }
+
+  /**
+    * The table of early `BlockTransactions` senders is bounded by `MaxEarlyTxSenders` and evicts the oldest entry first.
+    */
+  property("NodeViewSynchronizer: early block transactions sender table is bounded") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val stopProbe = TestProbe("EarlyTxBoundStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      system.stop(synchronizerMockRef)
+      stopProbe.expectTerminated(synchronizerMockRef)
+
+      val holderProbe = TestProbe("EarlyTxBoundHolderProbe")
+      val synchronizer = TestActorRef(new SynchronizerMock(
+        ncProbe.ref,
+        holderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker))
+      holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val blocks = genChain(3, hist, (Header.InitialVersion + 1).toByte)
+      val withParent = applyBlock(hist, blocks.head)
+      synchronizer ! ChangedHistory(withParent)
+      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val senderOldest = distinctDownloadPeer(pchProbe.ref, 43001)
+      val senderRetained = distinctDownloadPeer(pchProbe.ref, 43002)
+      val fallbackPeer = distinctDownloadPeer(pchProbe.ref, 43003)
+      syncTracker.updateStatus(fallbackPeer, org.ergoplatform.consensus.Equal, Some(blocks.head.header.height))
+
+      val oldestTxs = blocks(1).blockTransactions
+      val retainedTxs = blocks(2).blockTransactions
+      val fillerSections = (1 until MaxEarlyTxSenders).map { i =>
+        val fakeHeaderBytes = Array.tabulate[Byte](32)(j => ((i >> (j % 16)) ^ (j * 31 + i)).toByte)
+        oldestTxs.copy(headerId = bytesToId(fakeHeaderBytes), sizeOpt = None)
+      }
+
+      def deliverEarly(section: BlockTransactions, from: ConnectedPeer): Unit = {
+        deliveryTracker.setRequested(section.modifierTypeId, section.id, from)(_ => Cancellable.alreadyCancelled)
+        synchronizer ! Message(
+          ModifiersSpec,
+          Left(ModifiersSpec.toBytes(ModifiersData(section.modifierTypeId, Map(section.id -> section.bytes)))),
+          Some(from)
+        )
+        eventually {
+          deliveryTracker.status(section.id, section.modifierTypeId, Seq.empty) shouldBe Unknown
+        }
+      }
+
+      deliverEarly(oldestTxs, senderOldest)
+      deliverEarly(retainedTxs, senderRetained)
+      // Deliver remaining filler sections in a single ModifiersData batch to keep the test fast
+      fillerSections.foreach { s =>
+        deliveryTracker.setRequested(s.modifierTypeId, s.id, senderRetained)(_ => Cancellable.alreadyCancelled)
+      }
+      synchronizer ! Message(
+        ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(BlockTransactions.modifierTypeId, fillerSections.map(s => s.id -> s.bytes).toMap))),
+        Some(senderRetained)
+      )
+      eventually {
+        fillerSections.foreach { s =>
+          deliveryTracker.status(s.id, s.modifierTypeId, Seq.empty) shouldBe Unknown
+        }
+      }
+      synchronizer.underlyingActor.earlyTxSendersCount shouldBe MaxEarlyTxSenders
+
+      // `oldestTxs` was evicted (`MaxEarlyTxSenders + 1` total distinct ids), while `retainedTxs` is still remembered
+      val withHeaders = withParent.append(blocks(1).header).get._1.append(blocks(2).header).get._1
+      synchronizer ! ChangedHistory(withHeaders)
+      synchronizer ! ErgoNodeViewHolder.DownloadRequest(
+        Map(BlockTransactions.modifierTypeId -> Seq(oldestTxs.id, retainedTxs.id))
+      )
+
+      val requestsByTarget = scala.collection.mutable.Map.empty[ModifierId, ConnectedPeer]
+      while (requestsByTarget.size < 2) {
+        val (to, ids) = ncProbe.fishForSpecificMessage(5.seconds) {
+          case SendToNetwork(msg, SendToPeer(peerTarget))
+              if msg.spec.messageCode == RequestModifierSpec.messageCode &&
+                msg.data.get.asInstanceOf[InvData].typeId == BlockTransactions.modifierTypeId =>
+            (peerTarget, msg.data.get.asInstanceOf[InvData].ids)
+        }
+        ids.foreach(id => requestsByTarget.put(id, to))
+      }
+      requestsByTarget.get(retainedTxs.id) shouldBe Some(senderRetained)
+      requestsByTarget.get(oldestTxs.id) shouldBe Some(fallbackPeer)
+    }
+  }
 }

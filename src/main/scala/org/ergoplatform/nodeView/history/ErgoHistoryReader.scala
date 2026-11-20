@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTyp
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.{EmptyHistoryHeight, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, StorageRentBox}
 import org.ergoplatform.nodeView.history.storage._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, FullBlockProcessor, HeadersProcessor}
 import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.MalformedModifierError
@@ -61,6 +61,10 @@ trait ErgoHistoryReader
     */
   def bestFullBlockOpt: Option[ErgoFullBlock] =
     bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
+
+  /** Whether a previously scanned parent remains on the selected full-block chain. */
+  def isInSelectedFullChain(id: ModifierId): Boolean =
+    FullBlockProcessor.isInBestFullChain(historyStorage, id)
 
   /**
     * @param id - modifier id
@@ -125,10 +129,20 @@ trait ErgoHistoryReader
   def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] =
     historyStorage.storageRentBoxesAtOrBefore(creationHeight, limit)
 
-  /**
-    * Remove storage-rent eligibility entries of the given boxes, e.g. when a miner self-claim
-    * transaction spending them failed validation during block assembly.
-    */
+  /** Continue an eligibility scan strictly after the previous examined row. */
+  def storageRentBoxesAtOrBefore(creationHeight: Int,
+                                 limit: Int,
+                                 after: Option[StorageRentBox]): Array[StorageRentBox] =
+    historyStorage.storageRentBoxesAtOrBefore(creationHeight, limit, after)
+
+  /** A raw-work-bounded page within one fixed storage-rent sweep. */
+  def storageRentScanPage(creationHeight: Int,
+                          maxGlobalIndex: Long,
+                          firstKey: Option[Array[Byte]],
+                          limit: Int): StorageRentScanPage =
+    historyStorage.storageRentScanPage(creationHeight, maxGlobalIndex, firstKey, limit)
+
+  /** Remove storage-rent eligibility entries only when their boxes are known spent. */
   def removeStorageRentBoxes(boxIds: Seq[ModifierId]): Unit =
     historyStorage.removeStorageRentBoxes(boxIds)
 

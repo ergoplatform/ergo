@@ -107,9 +107,12 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   }
 
   private def updateStatsOnRemoval(tx: ErgoTransaction): MemPoolStatistics = {
+    val now = System.currentTimeMillis()
     val wtx = pool.transactionsRegistry.get(tx.id)
-    wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
-       .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
+    wtx.map { wgtx =>
+       val txFeePerKb = scaledFeePerFactor(extractFee(tx), math.max(1, tx.size))
+      stats.add(now, wgtx.created, txFeePerKb)
+    }.getOrElse(MemPoolStatistics(now, 0, now))
   }
 
   /**
@@ -449,52 +452,82 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       .foldLeft(0L)(saturatingAdd)
   }
 
-  /**
-    * Get average fee for the specified wait time interval
-    *
-    * @param expectedWaitTimeMinutes - maximal amount of time for which transaction can be kept in mempool
-    * @param txSize                  - size of transaction (in bytes)
-    * @return recommended fee value for transaction to be proceeded in specified time
-    */
-  def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int): Long = {
-    @tailrec def loop(waitMinutes: Int): Option[Long] =
-      Try(stats.histogram(waitMinutes)).toOption match {
-        case Some(bin) if bin.nTxns != 0 => Some(feeForFactor(bin.totalFee / bin.nTxns, txSize))
-        case _ if waitMinutes < expectedWaitTimeMinutes => loop(waitMinutes + 1)
-        case _ => None
-      }
+ private def binFeeForSize(bin: FeeHistogramBin, txSize: Int): Long =
+  feeForFactor(bin.totalFee / bin.nTxns, txSize)
 
-    val recommendedFee = loop(waitMinutes = 0).getOrElse(settings.nodeSettings.minimalFeeAmount)
-    math.max(recommendedFee, settings.nodeSettings.minimalFeeAmount)
-  }
+def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int): Long = {
+val maxWaitMinutes = math.max(0, expectedWaitTimeMinutes)
 
-  /**
-    * Calculate position in mempool corresponding to the specified fee and
-    * estimate time of serving this transaction based on average rate of placing
-    * transactions in blockchain
-    *
-    * @param txFee  - transaction fee
-    * @param txSize - size of transaction (in bytes)
-    * @return average time for this transaction to be placed in block
-    */
-  def getExpectedWaitTime(txFee : Long, txSize : Int): Long  = {
-    // Create dummy transaction entry
-    val feePerKb = scaledFeePerFactor(txFee, txSize)
-    val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
-    val wtx = WeightedTxId(dummyModifierId, feePerKb, feePerKb, 0)
+@tailrec def loop(waitMinutes: Int, withinTargetBest: Option[Long]): Option[Long] =
+Try(stats.histogram(waitMinutes)).toOption match {
+case Some(bin) =>
+if (waitMinutes <= maxWaitMinutes) {
+val nextBest =
+if (bin.nTxns > 0) {
+val fee = binFeeForSize(bin, txSize)
+Some(withinTargetBest.fold(fee)(math.min(_, fee)))
+} else {
+withinTargetBest
+}
+loop(waitMinutes + 1, nextBest)
+} else if (withinTargetBest.isDefined) {
+withinTargetBest
+} else if (bin.nTxns > 0) {
+Some(binFeeForSize(bin, txSize))
+} else {
+loop(waitMinutes + 1, None)
+}
+case None =>
+withinTargetBest
+}
 
-    // Find position of entry in mempool
-    val posInPool = pool.orderedTransactions.keySet.until(wtx).size
+val recommendedFee = loop(waitMinutes = 0, withinTargetBest = None)
+.getOrElse(settings.nodeSettings.minimalFeeAmount)
+math.max(recommendedFee, settings.nodeSettings.minimalFeeAmount)
+}
 
-    // Time since statistics measurement interval (needed to calculate average tx rate)
-    val elapsed = System.currentTimeMillis() - stats.startMeasurement
-    val cappedElapsed = math.max(0L, math.min(elapsed, MemPoolStatistics.measurementIntervalMsec.toLong))
-    if (stats.takenTxns > 0) {
-      cappedElapsed * posInPool / stats.takenTxns
-    } else {
-      0
-    }
-  }
+def getExpectedWaitTime(txFee: Long, txSize: Int): Long = {
+val histogramEstimateMs: Option[Long] =
+if (txSize > 0) {
+stats.histogram.iterator.zipWithIndex.collectFirst {
+case (bin, waitMinutes) if bin.nTxns > 0 && binFeeForSize(bin, txSize) <= txFee =>
+waitMinutes.toLong * 60L * 1000L
+}
+} else {
+None
+}
+
+histogramEstimateMs.getOrElse {
+val feePerKb = scaledFeePerFactor(txFee, txSize)
+val posInPool = sortingOption match {
+case SortingOption.FeePerByte =>
+val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
+val wtx = WeightedTxId(dummyModifierId, feePerKb, feePerKb, 0)
+pool.orderedTransactions.keySet.until(wtx).size
+case SortingOption.FeePerCycle =>
+pool.orderedTransactions.valuesIterator.count { utx =>
+val utxSize = math.max(1, utx.transactionBytes.map(_.length).getOrElse(utx.transaction.size))
+scaledFeePerFactor(extractFee(utx.transaction), utxSize) > feePerKb
+}
+}
+
+val elapsed = System.currentTimeMillis() - stats.startMeasurement
+val cappedElapsed = math.max(0L, math.min(elapsed, MemPoolStatistics.measurementIntervalMsec.toLong))
+val backlogMs = if (stats.takenTxns > 0) {
+cappedElapsed * posInPool / stats.takenTxns
+} else {
+0L
+}
+
+val slowestBinIdx = stats.histogram.lastIndexWhere(_.nTxns > 0)
+if (slowestBinIdx >= 0 && txSize > 0) {
+val histogramFloorMs = math.min(MemPoolStatistics.nHistogramBins, slowestBinIdx + 1).toLong * 60L * 1000L
+math.max(histogramFloorMs, backlogMs)
+} else {
+backlogMs
+}
+}
+}
 
   /**
     * @return read-only copy of this history

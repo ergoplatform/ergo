@@ -35,6 +35,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   type LSN = Long // logical serial number: type used to provide order of records in undo list
 
   private val last_version_key = Blake2b256("last_version")
+  private val committed_state_key = Blake2b256("committed_state")
+
+  private def isInternalKey(key: Array[Byte]): Boolean =
+    java.util.Arrays.equals(key, last_version_key) ||
+      java.util.Arrays.equals(key, committed_state_key)
 
   private var keepVersions: Int = initialKeepVersions
 
@@ -42,16 +47,18 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   override val lock = new ReentrantReadWriteLock()
 
   private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
+
+  //default write options, no sync!
+  private val writeOptions = new WriteOptions()
+
+  recoverInterruptedWrite()
+
   private var lsn: LSN = getLastLSN // last assigned logical serial number
   private var versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions (var because we need to invert this array)
 
   // mutable array of all the kept versions
   private val versions: ArrayBuffer[VersionID] = getAllVersions
   private var lastVersion: Option[VersionID] = versions.lastOption
-
-
-  //default write options, no sync!
-  private val writeOptions = new WriteOptions()
 
   // With keepVersions = 0 no undo records are kept, so a store opened with 0 drops the ones an earlier run with
   // keepVersions > 0 left, as setKeepVersions(0) does. Otherwise they would still name the last version on the
@@ -64,6 +71,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
       s"last_version_key $lastVersionKey set to ${Base16.encode(versions.last)}")
     cleanStart(0)
   }
+
+  ensureCommittedStateInitialized()
 
   private def createDB(dir: File, storeName: String): DB = {
     val op = new Options()
@@ -113,6 +122,35 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     }
   }
 
+  override def getWithFilter(cond: (K, V) => Boolean): Iterator[(K, V)] =
+    super.getWithFilter((k, v) => !isInternalKey(k) && cond(k, v))
+
+  override def getRange(start: K, end: K, limit: Int = Int.MaxValue): Array[(K, V)] = {
+    val ro = new ReadOptions()
+    ro.snapshot(db.getSnapshot)
+    val iter = db.iterator(ro)
+    try {
+      iter.seek(start)
+      val bf = ArrayBuffer.empty[(K, V)]
+      var elemCounter = 0
+      while (iter.hasNext && elemCounter < limit) {
+        val next = iter.next()
+        if (ByteArrayUtils.compare(next.getKey, end) <= 0) {
+          if (!isInternalKey(next.getKey)) {
+            elemCounter += 1
+            bf += (next.getKey -> next.getValue)
+          }
+        } else {
+          elemCounter = limit
+        }
+      }
+      bf.toArray[(K, V)]
+    } finally {
+      iter.close()
+      ro.snapshot().close()
+    }
+  }
+
   def processAll(consumer: (K, V) => Unit): Unit = {
     lock.readLock().lock()
     val iterator = db.iterator()
@@ -120,11 +158,106 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
       iterator.seekToFirst()
       while (iterator.hasNext) {
         val n = iterator.next()
-        consumer(n.getKey, n.getValue)
+        if (!isInternalKey(n.getKey)) {
+          consumer(n.getKey, n.getValue)
+        }
       }
     } finally {
       iterator.close()
       lock.readLock().unlock()
+    }
+  }
+
+  private def encodeCommittedState(committedLsn: LSN, versionOpt: Option[VersionID]): Array[Byte] = {
+    val versionBytes = versionOpt.getOrElse(Array.emptyByteArray)
+    val buf = ByteBuffer.allocate(8 + versionBytes.length)
+    buf.putLong(committedLsn)
+    buf.put(versionBytes)
+    buf.array()
+  }
+
+  private def decodeCommittedState(bytes: Array[Byte]): (LSN, Option[VersionID]) = {
+    val committedLsn = ByteBuffer.wrap(bytes, 0, 8).getLong
+    val versionOpt = if (bytes.length > 8) Some(bytes.slice(8, bytes.length)) else None
+    (committedLsn, versionOpt)
+  }
+
+  private def isMainDbEmpty: Boolean = {
+    val iterator = db.iterator()
+    try {
+      iterator.seekToFirst()
+      !iterator.hasNext
+    } finally {
+      iterator.close()
+    }
+  }
+
+  /**
+    * Reconciles `ldb_undo` and `ldb_main` when an earlier process stopped between their two non-atomic writes
+    * (either inside `update` after writing `ldb_undo` and before writing `ldb_main`, or inside `rollbackTo`
+    * after writing `ldb_main` and before pruning `ldb_undo`).
+    */
+  private def recoverInterruptedWrite(): Unit = {
+    val rawMeta = db.get(committed_state_key)
+    val undoMaxLsn = getLastLSN
+    if (rawMeta == null) {
+      if (undoMaxLsn == 0 && db.get(last_version_key) == null && isMainDbEmpty) {
+        db.put(committed_state_key, encodeCommittedState(0L, None), writeOptions)
+      }
+    } else {
+      val (committedLsn, committedVersionOpt) = decodeCommittedState(rawMeta)
+      if (undoMaxLsn > committedLsn) {
+        log.warn(
+          s"$dir has uncommitted undo records up to LSN $undoMaxLsn above committed LSN $committedLsn " +
+            s"(version ${committedVersionOpt.map(Base16.encode).getOrElse("none")}): rolling back uncommitted tail"
+        )
+        val mainBatch = db.createWriteBatch()
+        val undoBatch = undo.createWriteBatch()
+        val iterator = undo.iterator()
+        try {
+          iterator.seekToFirst()
+          var undoing = true
+          while (undoing && iterator.hasNext) {
+            val entry = iterator.next()
+            val entryLsn = decodeLSN(entry.getKey)
+            if (entryLsn > committedLsn) {
+              undoBatch.delete(entry.getKey)
+              val u = deserializeUndo(entry.getValue)
+              if (u.value == null) {
+                if (u.key.length != 0) {
+                  mainBatch.delete(u.key)
+                }
+              } else {
+                mainBatch.put(u.key, u.value)
+              }
+            } else {
+              undoing = false
+            }
+          }
+          if (committedLsn == 0L) {
+            committedVersionOpt match {
+              case Some(v) => mainBatch.put(last_version_key, v)
+              case None    => mainBatch.delete(last_version_key)
+            }
+          }
+          db.write(mainBatch, writeOptions)
+          undo.write(undoBatch, writeOptions)
+        } finally {
+          iterator.close()
+          mainBatch.close()
+          undoBatch.close()
+        }
+      }
+    }
+  }
+
+  private def ensureCommittedStateInitialized(): Unit = {
+    val rawMeta = db.get(committed_state_key)
+    val currentUndoLsn = getLastLSN
+    if (rawMeta == null) {
+      db.put(committed_state_key, encodeCommittedState(currentUndoLsn, lastVersion), writeOptions)
+    } else if (currentUndoLsn == 0L && decodeCommittedState(rawMeta)._1 > 0L) {
+      db.put(committed_state_key, encodeCommittedState(0L, lastVersion), writeOptions)
     }
   }
 
@@ -254,6 +387,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
              toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
+    var undoWritten = false
     val batch = db.createWriteBatch()
     val undoBatch = undo.createWriteBatch()
     try {
@@ -279,7 +413,10 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         if (lsn == lastLsn) { // no records were written for this version: generate dummy record
           undoBatch.put(newLSN(), serializeUndo(versionID, new Array[Byte](0), null))
         }
+        batch.put(committed_state_key, encodeCommittedState(lsn, Some(versionID)))
         undo.write(undoBatch, writeOptions)
+        undoWritten = true
+        db.write(batch, writeOptions)
         if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
           versions += versionID
           versionLsn += lastLsn + 1 // first LSN for this version
@@ -287,8 +424,12 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         }
       } else {
         //keepVersions = 0
+        batch.put(committed_state_key, encodeCommittedState(0L, Some(versionID)))
         if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
           batch.put(last_version_key, versionID)
+        }
+        db.write(batch, writeOptions)
+        if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
           versions.clear()
           versions += versionID
           if (versionLsn.isEmpty) {
@@ -297,8 +438,13 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         }
       }
 
-      db.write(batch, writeOptions)
       lastVersion = Some(versionID)
+    } catch {
+      case t: Throwable =>
+        if (!undoWritten) {
+          lsn = lastLsn
+        }
+        throw t
     } finally {
       // Make sure you close the batch to avoid resource leaks.
       batch.close()
@@ -318,6 +464,9 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     if (deteriorated >= 0) {
       val fromLsn = versionLsn(0)
       val tillLsn = if (deteriorated+1 < versions.size) versionLsn(deteriorated+1) else lsn+1
+      if (count == 0) {
+        db.put(last_version_key, versions.last, writeOptions)
+      }
       val batch = undo.createWriteBatch()
       try {
         for (lsn <- fromLsn until tillLsn) {
@@ -328,11 +477,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         batch.close()
       }
 
+      if (count == 0) {
+        db.put(committed_state_key, encodeCommittedState(0L, Some(versions.last)), writeOptions)
+      }
       versions.remove(0, deteriorated)
       versionLsn.remove(0, deteriorated)
-      if (count == 0) {
-        db.put(last_version_key, versions(0))
-      }
     }
   }
 
@@ -394,6 +543,10 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
                   batch.put(undo.key, undo.value)
                 }
               }
+            }
+            batch.put(committed_state_key, encodeCommittedState(lastLsn, Some(versionID)))
+            if (lastLsn == 0L) {
+              batch.put(last_version_key, versionID)
             }
             db.write(batch, writeOptions)
             undo.write(undoBatch, writeOptions)

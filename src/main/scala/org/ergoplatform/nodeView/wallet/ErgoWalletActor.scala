@@ -263,11 +263,17 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
-    case ScanBoxesFromUtxoSnapshot(subtrees, current, total, fullHeight) =>
+    case ScanBoxesFromUtxoSnapshot(subtrees, current, total, fullHeight, fromStart) =>
       val firstChunk = current - subtrees.size + 1
+      // A scan that begins with the first subtree visits every box of the UTXO set, so the registry is emptied
+      // first: boxes left by an interrupted or still running earlier scan would be counted twice or kept when spent.
+      val startState = if (fromStart) ergoWalletService.recreateRegistry(state, settings) else Success(state)
+      startState.failed.foreach { ex =>
+        log.error(s"Failed to empty the wallet registry before UTXO set scan, chunk $firstChunk / $total is not scanned", ex)
+      }
       // stop at the first failed chunk and reply with the last chunk scanned, so the scanner records progress only that far
-      val (newState, lastScanned) = subtrees.zipWithIndex.foldLeft((state, firstChunk - 1)) {
-        case ((accState, scanned), ((id, boxes), i)) if scanned == firstChunk + i - 1 =>
+      val (newState, lastScanned) = subtrees.zipWithIndex.foldLeft((startState.getOrElse(state), firstChunk - 1)) {
+        case ((accState, scanned), ((id, boxes), i)) if startState.isSuccess && scanned == firstChunk + i - 1 =>
           val chunk = firstChunk + i
           val chunkHeight = if (chunk == total) fullHeight else 0
           ergoWalletService.scanSnapshotChunk(accState, boxes, id, settings.walletSettings.dustLimit, chunkHeight) match {

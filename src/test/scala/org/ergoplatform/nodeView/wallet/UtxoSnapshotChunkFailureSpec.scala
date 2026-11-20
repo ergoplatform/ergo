@@ -39,6 +39,12 @@ class UtxoSnapshotChunkFailureSpec extends ErgoCorePropertyTest with FileUtils {
       }
   }
 
+  /** Wallet service that cannot recreate the wallet registry. */
+  private class StuckRegistryService(s: ErgoSettings) extends ErgoWalletServiceImpl(s) {
+    override def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
+      Failure(new Exception("injected registry failure"))
+  }
+
   private def walletActor(service: ErgoWalletService)(implicit system: ActorSystem): ActorRef = {
     val s = settings.copy(directory = createTempDir.getAbsolutePath)
     val selector = new ReplaceCompactCollectBoxSelector(s.walletSettings.maxInputs, s.walletSettings.optimalInputs, None)
@@ -79,6 +85,21 @@ class UtxoSnapshotChunkFailureSpec extends ErgoCorePropertyTest with FileUtils {
       failReply should not equal okReply
       failReply shouldBe 2
       okReply shouldBe 3
+    } finally {
+      Await.result(system.terminate(), 30.seconds)
+    }
+  }
+
+  property("a batch that begins a scan is not scanned when the wallet registry cannot be emptied") {
+    implicit val system: ActorSystem = ActorSystem("utxo-snapshot-registry-failure")
+    try {
+      val batch = (1 to 3).map(i => subtreeId(i) -> Array.empty[ErgoBox])
+      val msg = ScanBoxesFromUtxoSnapshot(batch, current = 3, total = 3, fullHeight = 7, fromStart = true)
+      val wallet = walletActor(new StuckRegistryService(settings))
+
+      // no chunk is scanned on top of what the registry held, and the scan is not recorded at its height
+      Await.result(wallet ? msg, 10.seconds) shouldBe 0
+      Await.result((wallet ? GetWalletStatus).mapTo[WalletStatus], 10.seconds).height shouldBe 0
     } finally {
       Await.result(system.terminate(), 30.seconds)
     }

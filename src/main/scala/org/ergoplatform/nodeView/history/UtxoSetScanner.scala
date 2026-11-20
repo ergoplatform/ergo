@@ -102,7 +102,10 @@ class UtxoSetScanner(nodeView: ActorRef, depth: Int = MainnetManifestDepth) exte
     * @return whether the wallet scanned the whole batch
     */
   private def sendBufferToWallet(wallet: ErgoWallet, current: Int, scanHeight: Int, offset: Int = 0): Boolean = {
-    val scanned = wallet.scanUtxoSnapshot(ScanBoxesFromUtxoSnapshot(chunkBuffer.toVector, current, totalSubtrees, scanHeight))
+    // every subtree counted so far is in this batch: none was skipped by a resume and no batch was sent before it
+    val fromStart = current - offset == chunkBuffer.size
+    val scanned = wallet.scanUtxoSnapshot(
+      ScanBoxesFromUtxoSnapshot(chunkBuffer.toVector, current, totalSubtrees, scanHeight, fromStart))
     val complete = scanned == current
     // on a failure, record the real position in the tree, so the next scan resumes at the failed subtree
     writeProgress(if (complete) current else scanned - offset, totalSubtrees)

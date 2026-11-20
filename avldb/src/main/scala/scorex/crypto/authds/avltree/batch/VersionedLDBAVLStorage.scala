@@ -155,6 +155,25 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       rootNodeLabel
     }
   }
+
+  /**
+    * Search the AVL+ tree in a read-only LevelDB snapshot for the first leaf value satisfying `predicate`.
+    * Stops immediately once a matching leaf is found.
+    */
+  def findLeafValue(predicate: Array[Byte] => Boolean): Try[Option[Array[Byte]]] =
+    store.processSnapshot { dbReader =>
+      def loop(label: Array[Byte]): Option[Array[Byte]] =
+        VersionedLDBAVLStorage.noStoreSerializer.parseBytes(dbReader.get(label)) match {
+          case leaf: ProverLeaf[DigestType] =>
+            if (leaf.value.nonEmpty && predicate(leaf.value)) Some(leaf.value) else None
+          case in: ProxyInternalNode[DigestType] =>
+            loop(in.leftLabel).orElse(loop(in.rightLabel))
+          case _ =>
+            None
+        }
+
+      Option(dbReader.get(topNodeHashKey)).flatMap(loop)
+    }
 }
 
 

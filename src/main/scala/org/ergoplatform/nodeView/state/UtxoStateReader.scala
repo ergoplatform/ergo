@@ -115,9 +115,96 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     }
   }
 
-  protected def emissionBoxIdOpt: Option[ADKey] = store.get(UtxoState.EmissionBoxIdKey).map(s => ADKey @@ s)
+  protected def emissionBoxIdOpt: Option[ADKey] =
+    store.get(UtxoState.EmissionBoxIdKey).filter(_.nonEmpty).map(s => ADKey @@ s)
 
   def emissionBoxOpt: Option[ErgoBox] = emissionBoxIdOpt.flatMap(boxById)
+
+  private lazy val reemissionBoxProposition =
+    ergoSettings.chainSettings.reemission.reemissionRules.reemissionBoxProp(ergoSettings.chainSettings.monetary)
+
+  private[state] def isReemissionBox(box: ErgoBox): Boolean = {
+    val rs = ergoSettings.chainSettings.reemission
+    rs.reemissionNftId.nonEmpty && {
+      val outTokens = box.additionalTokens
+      !outTokens.isEmpty &&
+        outTokens(0)._1 == rs.reemissionNftIdBytes &&
+        box.ergoTree == reemissionBoxProposition
+    }
+  }
+
+  private def findReemissionBoxInSnapshot(): Option[ErgoBox] =
+    persistentProver.synchronized {
+      storage.findLeafValue { leafBytes =>
+        ErgoBoxSerializer.parseBytesTry(leafBytes).toOption.exists(isReemissionBox)
+      }.toOption.flatten
+        .flatMap(ErgoBoxSerializer.parseBytesTry(_).toOption)
+        .flatMap(b => boxById(b.id))
+    }
+
+  @volatile private var fallbackReemissionBoxIdOpt: Option[Option[ADKey]] = None
+
+  /**
+    * Extracts the current unspent EIP-27 re-emission contract box after applying `fb`.
+    *
+    * @return `Some(Some(box))` when the unspent re-emission box is known,
+    *         `Some(None)` when no unspent re-emission box exists, or `None` when
+    *         tracking has not yet been initialized in `store` prior to `reemissionStartHeight - 1`.
+    */
+  protected[state] def extractReemissionBox(fb: ErgoFullBlock): Option[Option[ErgoBox]] = {
+    val rs = ergoSettings.chainSettings.reemission
+    if (rs.reemissionNftId.isEmpty) {
+      None
+    } else {
+      val createdInBlock: Option[ErgoBox] = fb.blockTransactions.txs.reverseIterator
+        .flatMap(_.outputs)
+        .find(b => isReemissionBox(b) && boxById(b.id).isDefined)
+      createdInBlock match {
+        case some @ Some(_) =>
+          Some(some)
+        case None =>
+          store.get(UtxoState.ReemissionBoxIdKey) match {
+            case Some(bytes) if bytes.nonEmpty =>
+              boxById(ADKey @@ bytes) match {
+                case some @ Some(_) => Some(some)
+                case None =>
+                  log.info("Last re-emission box consumed")
+                  Some(None)
+              }
+            case Some(_) =>
+              Some(None)
+            case None if fb.height >= rs.reemissionStartHeight - 1 =>
+              Some(findReemissionBoxInSnapshot())
+            case None =>
+              None
+          }
+      }
+    }
+  }
+
+  def reemissionBoxOpt: Option[ErgoBox] = {
+    if (ergoSettings.chainSettings.reemission.reemissionNftId.isEmpty) {
+      None
+    } else {
+      store.get(UtxoState.ReemissionBoxIdKey) match {
+        case Some(bytes) if bytes.nonEmpty =>
+          boxById(ADKey @@ bytes)
+        case Some(_) =>
+          None
+        case None =>
+          val cachedBoxOpt = fallbackReemissionBoxIdOpt.flatMap(_.flatMap(boxById))
+          cachedBoxOpt.orElse {
+            if (fallbackReemissionBoxIdOpt.contains(None)) {
+              None
+            } else {
+              val foundOpt = findReemissionBoxInSnapshot()
+              fallbackReemissionBoxIdOpt = Some(foundOpt.map(_.id))
+              foundOpt
+            }
+          }
+      }
+    }
+  }
 
   def boxById(id: ADKey): Option[ErgoBox] = persistentProver.synchronized {
     persistentProver.unauthenticatedLookup(id) flatMap { adValue =>

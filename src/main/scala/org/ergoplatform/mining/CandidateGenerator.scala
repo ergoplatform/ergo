@@ -23,6 +23,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
 import org.ergoplatform.settings.{Constants, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
@@ -890,13 +891,22 @@ object CandidateGenerator extends ScorexLogging {
     minerPk: ProveDlog,
     stateContext: ErgoStateContext
   ): Option[ErgoTransaction] = {
+    val currentHeight = state.stateContext.currentHeight
+    val emissionBoxOpt = state.emissionBoxOpt
+    val reemissionBoxOpt =
+      if (currentHeight + 1 >= stateContext.chainSettings.reemission.reemissionStartHeight) {
+        state.reemissionBoxOpt
+      } else {
+        None
+      }
     collectRewards(
-      state.emissionBoxOpt,
-      state.stateContext.currentHeight,
+      emissionBoxOpt,
+      currentHeight,
       Seq.empty,
       minerPk,
       stateContext,
-      Colls.emptyColl
+      Colls.emptyColl,
+      reemissionBoxOpt
     ).headOption
   }
 
@@ -910,8 +920,9 @@ object CandidateGenerator extends ScorexLogging {
   }
 
   /**
-    * Generate from 0 to 2 transaction that collecting rewards from fee boxes in block transactions `txs` and
-    * emission box `emissionBoxOpt`
+    * Generate from 0 to 2 transactions collecting rewards from fee boxes in block transactions `txs` and
+    * from the emission box `emissionBoxOpt` (or the EIP-27 re-emission box `reemissionBoxOpt` once
+    * emission is depleted and `nextHeight >= reemissionStartHeight`).
     */
   def collectRewards(
     emissionBoxOpt: Option[ErgoBox],
@@ -919,7 +930,8 @@ object CandidateGenerator extends ScorexLogging {
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
     stateContext: ErgoStateContext,
-    assets: Coll[(TokenId, Long)] = Colls.emptyColl
+    assets: Coll[(TokenId, Long)] = Colls.emptyColl,
+    reemissionBoxOpt: Option[ErgoBox] = None
   ): Seq[ErgoTransaction] = {
     val chainSettings = stateContext.chainSettings
     val propositionBytes = chainSettings.monetary.feePropositionBytes
@@ -936,70 +948,160 @@ object CandidateGenerator extends ScorexLogging {
     val minerProp =
       ErgoTreePredef.rewardOutputScript(emission.settings.minerRewardDelay, minerPk)
 
-    val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.map { emissionBox =>
-      val prop           = emissionBox.ergoTree
-      val emissionAmount = emission.minersRewardAtHeight(nextHeight)
-
-      // how many nanoERG should be re-emitted
-      lazy val reemissionAmount = reemissionRules.reemissionForHeight(nextHeight, emission)
-
-      val emissionBoxAssets: Coll[(TokenId, Long)] = if (nextHeight == eip27ActivationHeight) {
-        // we inject emission box NFT and reemission tokens on activation height
-        // see "Activation Details" section of EIP-27
-        val injTokens = reemissionSettings.injectionBox.additionalTokens
-
-        //swap tokens if emission NFT is going after reemission
-        if (injTokens.apply(1)._2 == 1) {
-          Colls.fromItems(injTokens.apply(1), injTokens.apply(0))
+    val emissionTxOpt: Option[ErgoTransaction] = emissionBoxOpt.flatMap { emissionBox =>
+      if (emissionBox.value <= emission.settings.oneEpochReduction) {
+        // Final spend of the emission box (`lastCoins` branch of `emissionBoxProp`):
+        // split remaining coins across two miner reward outputs so `Outputs(1)` satisfies
+        // `correctMinerOutput` without creating a zero-value dust output at `Outputs(0)`.
+        val minFirstOut = BoxUtils.minimalErgoAmountSimulated(
+          minerProp,
+          Colls.emptyColl,
+          Map.empty,
+          stateContext.currentParameters
+        )
+        val minSecondOut = BoxUtils.minimalErgoAmountSimulated(
+          minerProp,
+          assets,
+          Map.empty,
+          stateContext.currentParameters
+        )
+        if (nextHeight > emissionBox.creationHeight && emissionBox.value >= minFirstOut + minSecondOut) {
+          val inputs = IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
+          val firstMinerBox = new ErgoBoxCandidate(minFirstOut, minerProp, nextHeight)
+          val secondMinerBox = new ErgoBoxCandidate(emissionBox.value - minFirstOut, minerProp, nextHeight, assets)
+          val emissionTx = ErgoTransaction(
+            inputs,
+            dataInputs = IndexedSeq.empty,
+            IndexedSeq(firstMinerBox, secondMinerBox)
+          )
+          log.info(s"Final emission depletion tx for nextHeight = $nextHeight: $emissionTx")
+          Some(emissionTx)
         } else {
-          injTokens
+          None
         }
       } else {
-        emissionBox.additionalTokens
-      }
+        val prop           = emissionBox.ergoTree
+        val emissionAmount = emission.minersRewardAtHeight(nextHeight)
 
-      val updEmissionAssets = if (nextHeight >= eip27ActivationHeight) {
-        // deduct reemission from emission box
-        val reemissionTokens = emissionBoxAssets.apply(1)._2
-        val updAmount = reemissionTokens - reemissionAmount
-        emissionBoxAssets.updated(1, reemissionTokenId -> updAmount)
-      } else {
-        emissionBoxAssets
-      }
+        if (emissionAmount <= 0L) {
+          None
+        } else {
+          // how many nanoERG should be re-emitted
+          lazy val reemissionAmount = reemissionRules.reemissionForHeight(nextHeight, emission)
 
-      val newEmissionBox: ErgoBoxCandidate =
-        new ErgoBoxCandidate(emissionBox.value - emissionAmount, prop, nextHeight, updEmissionAssets)
-      val inputs = if (nextHeight == eip27ActivationHeight) {
-        // injection - second input is injection box
-        IndexedSeq(
-          new Input(emissionBox.id, ProverResult.empty),
-          new Input(reemissionSettings.injectionBox.id, ProverResult.empty)
-        )
-      } else {
-        IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
-      }
+          val eip27TokensConfigured =
+            reemissionSettings.emissionNftId.nonEmpty && reemissionSettings.reemissionTokenId.nonEmpty
 
-      val minerAmt = if (nextHeight == eip27ActivationHeight) {
-        // injection - injection box value going to miner
-        emissionAmount + reemissionSettings.injectionBox.value
-      } else {
-        emissionAmount
-      }
-      val minersAssets = if (nextHeight >= eip27ActivationHeight) {
-        // miner is getting reemission tokens
-        assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
-      } else {
-        assets
-      }
-      val minerBox = new ErgoBoxCandidate(minerAmt, minerProp, nextHeight, minersAssets)
+          val emissionBoxAssets: Coll[(TokenId, Long)] =
+            if (eip27TokensConfigured && nextHeight == eip27ActivationHeight) {
+              // we inject emission box NFT and reemission tokens on activation height
+              // see "Activation Details" section of EIP-27
+              val injTokens = reemissionSettings.injectionBox.additionalTokens
 
-      val emissionTx = ErgoTransaction(
-        inputs,
-        dataInputs = IndexedSeq.empty,
-        IndexedSeq(newEmissionBox, minerBox)
-      )
-      log.info(s"Emission tx for nextHeight = $nextHeight: $emissionTx")
-      emissionTx
+              //swap tokens if emission NFT is going after reemission
+              if (injTokens.apply(1)._2 == 1) {
+                Colls.fromItems(injTokens.apply(1), injTokens.apply(0))
+              } else {
+                injTokens
+              }
+            } else {
+              emissionBox.additionalTokens
+            }
+
+          val updEmissionAssets =
+            if (eip27TokensConfigured && nextHeight >= eip27ActivationHeight) {
+              // deduct reemission from emission box
+              val reemissionTokens = emissionBoxAssets.apply(1)._2
+              val updAmount = reemissionTokens - reemissionAmount
+              emissionBoxAssets.updated(1, reemissionTokenId -> updAmount)
+            } else {
+              emissionBoxAssets
+            }
+
+          val remainingEmission = emissionBox.value - emissionAmount
+          val minEmissionBoxValue = BoxUtils.minimalErgoAmountSimulated(
+            prop,
+            updEmissionAssets,
+            Map.empty,
+            stateContext.currentParameters
+          )
+          if (remainingEmission < minEmissionBoxValue) {
+            None
+          } else {
+            val newEmissionBox: ErgoBoxCandidate =
+              new ErgoBoxCandidate(remainingEmission, prop, nextHeight, updEmissionAssets)
+            val inputs = if (eip27TokensConfigured && nextHeight == eip27ActivationHeight) {
+              // injection - second input is injection box
+              IndexedSeq(
+                new Input(emissionBox.id, ProverResult.empty),
+                new Input(reemissionSettings.injectionBox.id, ProverResult.empty)
+              )
+            } else {
+              IndexedSeq(new Input(emissionBox.id, ProverResult.empty))
+            }
+
+            val minerAmt = if (eip27TokensConfigured && nextHeight == eip27ActivationHeight) {
+              // injection - injection box value going to miner
+              emissionAmount + reemissionSettings.injectionBox.value
+            } else {
+              emissionAmount
+            }
+            val minersAssets =
+              if (eip27TokensConfigured && nextHeight >= eip27ActivationHeight && reemissionAmount > 0) {
+                // miner is getting reemission tokens
+                assets.append(Colls.fromItems(reemissionTokenId -> reemissionAmount))
+              } else {
+                assets
+              }
+            val minerBox = new ErgoBoxCandidate(minerAmt, minerProp, nextHeight, minersAssets)
+
+            val emissionTx = ErgoTransaction(
+              inputs,
+              dataInputs = IndexedSeq.empty,
+              IndexedSeq(newEmissionBox, minerBox)
+            )
+            log.info(s"Emission tx for nextHeight = $nextHeight: $emissionTx")
+            Some(emissionTx)
+          }
+        }
+      }
+    }.orElse {
+      reemissionBoxOpt.flatMap { reemissionBox =>
+        val prop = reemissionBox.ergoTree
+        val reemissionBoxAssets = reemissionBox.additionalTokens
+        val reemissionReward = reemissionRules.reemissionRewardPerBlock
+        val remainingValue = reemissionBox.value - reemissionReward
+        val hasReemissionNft =
+          reemissionSettings.reemissionNftId.nonEmpty &&
+            !reemissionBoxAssets.isEmpty &&
+            reemissionBoxAssets(0)._1 == reemissionSettings.reemissionNftIdBytes
+        if (nextHeight >= reemissionSettings.reemissionStartHeight &&
+            nextHeight > reemissionBox.creationHeight &&
+            hasReemissionNft) {
+          val minReemissionBoxValue = BoxUtils.minimalErgoAmountSimulated(
+            prop,
+            reemissionBoxAssets,
+            Map.empty,
+            stateContext.currentParameters
+          )
+          if (remainingValue >= minReemissionBoxValue) {
+            val newReemissionBox = new ErgoBoxCandidate(remainingValue, prop, nextHeight, reemissionBoxAssets)
+            val minerBox = new ErgoBoxCandidate(reemissionReward, minerProp, nextHeight, assets)
+            val inputs = IndexedSeq(new Input(reemissionBox.id, ProverResult.empty))
+            val reemissionTx = ErgoTransaction(
+              inputs,
+              dataInputs = IndexedSeq.empty,
+              IndexedSeq(newReemissionBox, minerBox)
+            )
+            log.info(s"Re-emission tx for nextHeight = $nextHeight: $reemissionTx")
+            Some(reemissionTx)
+          } else {
+            None
+          }
+        } else {
+          None
+        }
+      }
     }
 
     // forming transaction collecting tx fees

@@ -370,4 +370,24 @@ class VersionedLDBAVLStorageSpecification
     }
   }
 
+  property("findLeafValue finds matching leaf and returns None when absent") {
+    val store = createVersionedStore()
+    val storage = createVersionedStorage(store)
+    storage.findLeafValue(_ => true) shouldBe Success(None)
+
+    val prover = createPersistentProver(storage)
+    val targetValue = ADValue @@ Longs.toByteArray(424242L)
+    (1L to 100L).foreach { i =>
+      val v = if (i == 57L) targetValue else ADValue @@ Longs.toByteArray(i)
+      prover.performOneOperation(Insert(ADKey @@ RandomBytes.randomBytes(KL), v)).get
+    }
+    prover.generateProofAndUpdateStorage()
+
+    val foundOpt = storage.findLeafValue(_.sameElements(targetValue)).get
+    foundOpt.isDefined shouldBe true
+    foundOpt.get.sameElements(targetValue) shouldBe true
+
+    storage.findLeafValue(_.sameElements(Longs.toByteArray(999999L))) shouldBe Success(None)
+  }
+
 }

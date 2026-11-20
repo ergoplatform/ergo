@@ -147,7 +147,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
           txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)
-            val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
+            val reemissionBox = extractReemissionBox(fb)
+            val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext, reemissionBox)
 
             var proofBytes = persistentProver.generateProofAndUpdateStorage(meta)
 
@@ -261,6 +262,7 @@ object UtxoState {
 
   private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
+  val ReemissionBoxIdKey: Digest32 = Algos.hash("reemission box id key")
 
 
   /**
@@ -270,21 +272,30 @@ object UtxoState {
     * @param stateRoot - UTXO set digest (hash and tree height) AFTER applying block `modId`
     * @param currentEmissionBoxOpt - current unspent emission script box
     * @param context - current state context used in input scripts validation (for the next block)
+    * @param currentReemissionBoxOpt - tracked EIP-27 re-emission box (`None` leaves existing entry untouched)
     *
     * @return binary-serialized metadata
     */
   def metadata(modId: VersionTag,
                stateRoot: ADDigest,
                currentEmissionBoxOpt: Option[ErgoBox],
-               context: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = {
+               context: ErgoStateContext,
+               currentReemissionBoxOpt: Option[Option[ErgoBox]] = None): Seq[(Array[Byte], Array[Byte])] = {
     val modIdBytes = versionToBytes(modId)
     val idStateDigestIdxElem: (Array[Byte], Array[Byte]) = modIdBytes -> stateRoot
     val stateDigestIdIdxElem = Algos.hash(stateRoot) -> modIdBytes
     val bestVersion = bestVersionKey -> modIdBytes
     val eb = EmissionBoxIdKey -> currentEmissionBoxOpt.map(emissionBox => emissionBox.id).getOrElse(Array[Byte]())
     val cb = ErgoStateReader.ContextKey -> context.bytes
+    val base = Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
 
-    Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
+    currentReemissionBoxOpt match {
+      case Some(reemissionBoxOpt) =>
+        val rb = ReemissionBoxIdKey -> reemissionBoxOpt.map(_.id).getOrElse(Array.emptyByteArray)
+        base :+ rb
+      case None =>
+        base
+    }
   }
 
   /**

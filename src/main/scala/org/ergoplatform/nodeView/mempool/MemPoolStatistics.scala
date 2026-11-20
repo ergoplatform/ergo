@@ -25,7 +25,9 @@ case class MemPoolStatistics(startMeasurement: Long,
     * prune statistic. To avoid siutation when we do not have statistic at all, we actually keep data up to
     * 2*measurementIntervalMsec and periodically cut half of range.
     */
-  def add(currTime: Long, wtx: WeightedTxId): MemPoolStatistics = {
+  def add(currTime: Long, wtx: WeightedTxId): MemPoolStatistics =  
+    add(currTime, wtx.created, wtx.feePerFactor)
+  def add(currTime: Long, createdTime: Long, feePerKb: Long): MemPoolStatistics = {
     val curTakenTx = takenTxns + 1
     val (newTakenTx, newMeasurement, newSnapTxs, newSnapTime) =
       if (currTime - snapTime > MemPoolStatistics.measurementIntervalMsec) {
@@ -38,10 +40,10 @@ case class MemPoolStatistics(startMeasurement: Long,
       } else {
         (curTakenTx, startMeasurement, snapTakenTxns, snapTime)
       }
-    val durationMinutes = ((currTime - wtx.created) / (60 * 1000)).toInt
+    val durationMinutes = ((currTime - createdTime) / (60 * 1000)).toInt
     val newHist =
-      if (durationMinutes < MemPoolStatistics.nHistogramBins) {
-        val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, saturatingAdd(histogram(durationMinutes).totalFee, wtx.feePerFactor))
+      if (durationMinutes >= 0 && durationMinutes < MemPoolStatistics.nHistogramBins) {
+        val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, saturatingAdd(histogram(durationMinutes).totalFee, feePerKb))
         histogram.updated(durationMinutes, FeeHistogramBin(histx, hisfee))
       } else {
         histogram

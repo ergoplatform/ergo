@@ -519,6 +519,69 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.getExpectedWaitTime(txFee = minimalFee, txSize = 1024) should be <= MemPoolStatistics.measurementIntervalMsec.toLong
   }
 
+  it should "recommend fees monotonically and fall forward when fast histogram bins are empty" in {
+    val feeSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 1000000L))
+    val minimalFee = feeSettings.nodeSettings.minimalFeeAmount
+    val now = System.currentTimeMillis()
+    val baseHist = MemPoolStatistics.defaultPoolHistogram
+      .updated(2, FeeHistogramBin(nTxns = 2, totalFee = 2L * 5000000L))
+      .updated(5, FeeHistogramBin(nTxns = 2, totalFee = 2L * 2000000L))
+    val stats = MemPoolStatistics(now, takenTxns = 4, snapTime = now, histogram = baseHist)
+    val pool = new ErgoMemPool(OrderedTxPool.empty(feeSettings), stats, SortingOption.FeePerByte)(feeSettings)
+
+    val fee0 = pool.getRecommendedFee(expectedWaitTimeMinutes = 0, txSize = 1024)
+    val fee1 = pool.getRecommendedFee(expectedWaitTimeMinutes = 1, txSize = 1024)
+    val fee2 = pool.getRecommendedFee(expectedWaitTimeMinutes = 2, txSize = 1024)
+    val fee5 = pool.getRecommendedFee(expectedWaitTimeMinutes = 5, txSize = 1024)
+
+    fee0 shouldBe 5000000L
+    fee1 shouldBe 5000000L
+    fee2 shouldBe 5000000L
+    fee5 shouldBe 2000000L
+    (fee1 >= fee5 && fee5 >= minimalFee) shouldBe true
+  }
+
+  it should "keep getExpectedWaitTime round-trip consistent with getRecommendedFee in fee space" in {
+    val feeSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 1000000L))
+    val minimalFee = feeSettings.nodeSettings.minimalFeeAmount
+    val now = System.currentTimeMillis()
+    val txSize = 150
+    val paidFee = 50000000L
+    val storedRate = OrderedTxPool.scaledFeePerFactor(paidFee, txSize)
+    val hist = MemPoolStatistics.defaultPoolHistogram.updated(2, FeeHistogramBin(nTxns = 1, totalFee = storedRate))
+    val stats = MemPoolStatistics(now, takenTxns = 1, snapTime = now, histogram = hist)
+    val pool = new ErgoMemPool(OrderedTxPool.empty(feeSettings), stats, SortingOption.FeePerByte)(feeSettings)
+
+    val recommended = pool.getRecommendedFee(expectedWaitTimeMinutes = 2, txSize = txSize)
+    pool.getExpectedWaitTime(recommended, txSize) shouldBe (2L * 60L * 1000L)
+    pool.getExpectedWaitTime(minimalFee, txSize) should be >= (3L * 60L * 1000L)
+  }
+
+  it should "record byte-normalized fee rates under FeePerCycle sorting" in {
+    val feeSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 1000000L))
+    val paidFee = 10000000L
+    val tx = feeTx(inputSeed = 7, fee = paidFee)
+    val utxWithHighCost = UnconfirmedTransaction(tx, None).withCost(500000)
+
+    val bytePool = new ErgoMemPool(
+      OrderedTxPool.empty(feeSettings),
+      MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()),
+      SortingOption.FeePerByte
+    )(feeSettings).put(utxWithHighCost).removeTxAndDoubleSpends(tx)
+
+    val cyclePool = new ErgoMemPool(
+      OrderedTxPool.empty(feeSettings),
+      MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()),
+      SortingOption.FeePerCycle
+    )(feeSettings).put(utxWithHighCost).removeTxAndDoubleSpends(tx)
+
+    val recByte = bytePool.getRecommendedFee(expectedWaitTimeMinutes = 1, txSize = tx.size)
+    val recCycle = cyclePool.getRecommendedFee(expectedWaitTimeMinutes = 1, txSize = tx.size)
+    recCycle shouldBe recByte
+    recCycle should be >= (paidFee - 1024L)
+    cyclePool.getExpectedWaitTime(recCycle, tx.size) shouldBe 0L
+  }
+
   it should "put not adding transaction twice" in {
     val pool = ErgoMemPool.empty(settings).pool
     val tx = invalidErgoTransactionGen.sample.get

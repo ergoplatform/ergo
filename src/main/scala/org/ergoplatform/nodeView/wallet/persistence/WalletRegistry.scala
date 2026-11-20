@@ -40,10 +40,15 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
   // Internal buffer that holds unspent boxes for fast retreival
   private[persistence] val cache: mutable.HashMap[ModifierId,TrackedBox] = mutable.HashMap[ModifierId,TrackedBox]()
 
+  @volatile private var closed: Boolean = false
+
+  private[wallet] def isClosed: Boolean = closed
+
   /**
     * Close wallet registry storage
     */
   def close(): Unit = {
+    closed = true
     store.close()
     cache.clear()
   }

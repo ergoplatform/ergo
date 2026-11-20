@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGen
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
-import org.ergoplatform.settings.{ErgoSettings, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, Parameters, WalletSettings}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
@@ -27,6 +27,7 @@ import sigma.Extensions.CollBytesOps
 import sigma.data.SigmaBoolean
 
 import java.io.FileNotFoundException
+import java.nio.file.FileAlreadyExistsException
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
 
@@ -320,6 +321,19 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
   }
 
+  private def ensureSecretFileAbsent(secretStorageSettings: SecretStorageSettings): Try[Unit] =
+    JsonSecretStorage.readFile(secretStorageSettings) match {
+      case Success(_) =>
+        Failure(new FileAlreadyExistsException("Wallet secret file already exists"))
+      case Failure(_: JsonSecretStorage.SecretFileNotFoundException) =>
+        Success(())
+      case Failure(error) =>
+        Failure(error)
+    }
+
+  protected def generateMnemonic(walletSettings: WalletSettings, entropy: Array[Byte]): Try[SecretString] =
+    new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits).toMnemonic(entropy)
+
   override def initWallet(state: ErgoWalletState,
                  settings: ErgoSettings,
                  walletPass: SecretString,
@@ -332,21 +346,47 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     def initStorage(mnemonic: SecretString): Try[JsonSecretStorage] =
       Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass, usePre1627KeyDerivation = false)(walletSettings.secretStorage))
 
-    val result =
-      new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
-        .toMnemonic(entropy)
-        .flatMap { mnemonic =>
-          initStorage(mnemonic).flatMap { newSecretStorage =>
-            // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+    val result = try {
+      generateMnemonic(walletSettings, entropy).flatMap { mnemonic =>
+        val setupResult: Try[(SecretString, ErgoWalletState)] = Try {
+          ensureSecretFileAbsent(walletSettings.secretStorage).flatMap { _ =>
+            // remove old wallet state before persisting the new secret file (#2837, #1313)
             recreateRegistry(state, settings).flatMap { stateV1 =>
-              recreateStorage(stateV1, settings).map { stateV2 =>
-                mnemonic -> stateV2.copy(secretStorageOpt = Some(newSecretStorage), walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings))
+              val withStorageAndSecret = recreateStorage(stateV1, settings).flatMap { stateV2 =>
+                initStorage(mnemonic) match {
+                  case Success(newSecretStorage) =>
+                    Success(
+                      mnemonic -> stateV2.copy(
+                        secretStorageOpt = Some(newSecretStorage),
+                        walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings)
+                      )
+                    )
+                  case Failure(err) =>
+                    if (stateV2.storage ne stateV1.storage) Try(stateV2.storage.close())
+                    Failure(err)
+                }
               }
+              if (withStorageAndSecret.isFailure && (stateV1.registry ne state.registry)) {
+                Try(stateV1.registry.close())
+              }
+              withStorageAndSecret
             }
           }
-        }
+        }.flatten
 
-    java.util.Arrays.fill(entropy, 0: Byte)
+        if (setupResult.isFailure) {
+          mnemonic.erase()
+          mnemonicPassOpt.foreach(_.erase())
+        }
+        setupResult
+      }
+    } finally {
+      java.util.Arrays.fill(entropy, 0: Byte)
+    }
+
+    if (result.isFailure) {
+      mnemonicPassOpt.foreach(_.erase())
+    }
     result
   }
 
@@ -413,17 +453,17 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
   }
 
-  override def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] = {
-    val registryFolder = WalletRegistry.registryFolder(settings)
-    log.info(s"Removing the registry folder $registryFolder")
-    state.registry.close()
-
-    deleteRecursive(registryFolder)
-
-    WalletRegistry.apply(settings).map { reg =>
-      state.copy(registry = reg)
+  override def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
+    Try {
+      val registryFolder = WalletRegistry.registryFolder(settings)
+      log.info(s"Removing the registry folder $registryFolder")
+      state.registry.close()
+      deleteRecursive(registryFolder)
+    }.flatMap { _ =>
+      WalletRegistry.apply(settings).map { reg =>
+        state.copy(registry = reg)
+      }
     }
-  }
 
   override def recreateStorage(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
     Try {

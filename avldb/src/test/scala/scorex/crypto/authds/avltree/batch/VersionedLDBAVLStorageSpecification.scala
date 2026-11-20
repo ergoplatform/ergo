@@ -394,7 +394,7 @@ class VersionedLDBAVLStorageSpecification
         bytesToId(subtree.id),
         subtree.leafValues.toArray
       ))
-    }
+    } shouldBe Success(())
 
     chunkBuffer.size shouldBe math.pow(2, depth).toInt - current
     chunkBuffer.map(_._1) shouldBe expectedSubtrees.map(_._1)

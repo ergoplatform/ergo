@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
+import scala.util.{Failure, Success}
 
 /**
   * Actor that scans the current UTXO set for wallet-related boxes and external scan rules
@@ -159,7 +160,8 @@ class UtxoSetScanner(nodeView: ActorRef, depth: Int = MainnetManifestDepth) exte
 
     var failed = false
     chunkBuffer.clear()
-    state.persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage].iterateAVLTree(current, depth) { subtree =>
+    val storage = state.persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage]
+    val walked = storage.iterateAVLTree(current, depth) { subtree =>
       if (!failed) {
         // Flush a full 32-subtree batch only when another subtree follows, keeping the last subtree
         // for the final flush so it receives `total` and records `scanHeight` even on shallow trees.
@@ -182,19 +184,34 @@ class UtxoSetScanner(nodeView: ActorRef, depth: Int = MainnetManifestDepth) exte
     }
 
     // If the AVL+ tree had leaves above `depth` (fewer than 2^depth subtrees), all leaves have now been visited
+    val visited = current
     val offset = total - current
     if (current < total) {
       current = total
     }
 
-    // flush remaining data, if any
-    if (chunkBuffer.nonEmpty) {
-      if (!sendBufferToWallet(wallet, current, scanHeight, version, offset)) {
+    // flush remaining data, if any; an exception thrown by the walk or by the last batch ends up in `flushed`
+    val flushed = walked.map { _ =>
+      if (chunkBuffer.nonEmpty) {
+        sendBufferToWallet(wallet, current, scanHeight, version, offset)
+      } else {
+        if (readProgress()._1 < total) writeProgress(total, total)
+        true
+      }
+    }
+
+    flushed match {
+      case Failure(e) =>
+        // An exception, such as the wallet's reply to a batch timing out, leaves it unknown whether the wallet
+        // scanned that batch, so the saved position is dropped: the next scan starts from the first subtree.
+        log.error(s"UTXO set scan stopped after subtree $visited of $total; it starts over on the next scan request", e)
+        writeProgress(0, totalSubtrees)
+        chunkBuffer.clear()
+        return
+      case Success(false) =>
         log.error("Wallet failed to scan a UTXO set subtree; the scan resumes from it on the next scan request")
         return
-      }
-    } else if (readProgress()._1 < total) {
-      writeProgress(total, total)
+      case Success(true) =>
     }
 
     if (current == total) {

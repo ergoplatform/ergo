@@ -162,8 +162,9 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     * @param fromIndex     - 0-based subtree index to start processing from (subtrees before `fromIndex` are skipped)
     * @param depth         - tree depth at which to split the AVL+ tree into subtrees
     * @param handleSubtree - callback invoked on each reconstructed [[BatchAVLProverSubtree]] at or after `fromIndex`
+    * @return failure if reading the database or `handleSubtree` threw; the subtrees after that point were not processed
     */
-  def iterateAVLTree(fromIndex: Int, depth: Int)(handleSubtree: BatchAVLProverSubtree[DigestType] => Unit): Unit =
+  def iterateAVLTree(fromIndex: Int, depth: Int)(handleSubtree: BatchAVLProverSubtree[DigestType] => Unit): Try[Unit] =
     store.processSnapshot { dbReader =>
 
       var current: Int = 0

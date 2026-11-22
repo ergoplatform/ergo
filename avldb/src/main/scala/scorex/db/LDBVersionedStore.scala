@@ -41,6 +41,13 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   override val db: DB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
 
+  // Snapshots handed out by processSnapshot and not released yet, guarded by the write lock. close() waits for them,
+  // because a snapshot must be released before its database is closed.
+  private var snapshotsInUse: Int = 0
+  private val snapshotReleased = lock.writeLock().newCondition()
+  // Set by close(). From then on processSnapshot refuses new snapshots and snapshot reads fail, so close() can finish.
+  @volatile private var closing: Boolean = false
+
   private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
   private var lsn: LSN = getLastLSN // last assigned logical serial number
   private var versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions (var because we need to invert this array)
@@ -355,6 +362,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   override def close(): Unit = {
     lock.writeLock().lock()
     try {
+      closing = true
+      while (snapshotsInUse > 0) {
+        log.info(s"Waiting for $snapshotsInUse snapshot(s) to be released before closing the store")
+        snapshotReleased.awaitUninterruptibly()
+      }
       undo.close()
       db.close()
     } finally {
@@ -435,13 +447,23 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     */
   def processSnapshot[T](logic: SnapshotReadInterface => T): Try[T] = {
     val ro = new ReadOptions()
+    var acquired = false
     try {
       lock.writeLock().lock()
-      ro.snapshot(db.getSnapshot)
-      lock.writeLock().unlock()
+      try {
+        if (closing) throw new DBException("Closed")
+        ro.snapshot(db.getSnapshot)
+        snapshotsInUse += 1
+        acquired = true
+      } finally {
+        lock.writeLock().unlock()
+      }
 
       object readInterface extends SnapshotReadInterface {
-        def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
+        def get(key: Array[Byte]): Array[Byte] = {
+          if (closing) throw new DBException("Store is closing")
+          db.get(key, ro)
+        }
       }
       Success(logic(readInterface))
     } catch {
@@ -449,8 +471,20 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         log.info("Error during snapshot processing: ", t)
         Failure(t)
     } finally {
-      // Close the snapshot to avoid resource leaks
-      ro.snapshot().close()
+      if (acquired) {
+        try {
+          // Close the snapshot to avoid resource leaks
+          ro.snapshot().close()
+        } finally {
+          lock.writeLock().lock()
+          try {
+            snapshotsInUse -= 1
+            snapshotReleased.signalAll()
+          } finally {
+            lock.writeLock().unlock()
+          }
+        }
+      }
     }
   }
 

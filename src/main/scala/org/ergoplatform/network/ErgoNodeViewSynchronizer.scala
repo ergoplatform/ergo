@@ -873,7 +873,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
-      deliveryTracker.setInvalid(id, ErgoTransaction.modifierTypeId)
+      // The id is not marked invalid: these bytes are not parsed, so they do not show that the transaction with
+      // this id is too big, and another peer may deliver it. As for bytes which do not parse below, the request is
+      // released on CheckDelivery.
       penalizeMisbehavingPeer(remote)
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")

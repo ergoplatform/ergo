@@ -4,10 +4,10 @@ import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.{TestActorRef, TestProbe}
-import org.ergoplatform.Input
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
@@ -17,6 +17,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
@@ -512,6 +513,102 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Received
       }
       ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  // replaces the fixture's synchronizer by one whose view holder is a probe, to read the transactions it forwards
+  private def txSynchronizer(ctx: Synchronizer2Fixture, pool: ErgoMemPool): (ActorRef, TestProbe) = {
+    import ctx._
+    val stopProbe = TestProbe("TxSynchronizerStopProbe")
+    stopProbe.watch(synchronizerMockRef)
+    system.stop(synchronizerMockRef)
+    stopProbe.expectTerminated(synchronizerMockRef)
+
+    val holderProbe = TestProbe("TxHolderProbe")
+    val synchronizer = system.actorOf(Props(new SynchronizerMock(
+      ncProbe.ref,
+      holderProbe.ref,
+      ErgoSyncInfoMessageSpec,
+      settings,
+      syncTracker,
+      deliveryTracker)))
+    holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+    synchronizer ! ChangedHistory(viewHistory)
+    synchronizer ! ChangedMempool(pool)
+    synchronizer -> holderProbe
+  }
+
+  // a fee-paying transaction, valid against the returned state: an empty proof spends a box guarded by `true`
+  private def feePayingTransaction(): (ErgoTransaction, WrappedUtxoState) = {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+    val inputBox = wus.takeBoxes(100).find(_.ergoTree == TrueTree).get
+    val feeOut = new ErgoBoxCandidate(inputBox.value, settings.chainSettings.monetary.feeProposition, creationHeight = 0)
+    val tx = ErgoTransaction(
+      IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, ContextExtension.empty))),
+      IndexedSeq(feeOut))
+    tx -> wus
+  }
+
+  private def deliverTransaction(synchronizer: ActorRef, id: ModifierId, bytes: Array[Byte], from: ConnectedPeer): Unit = {
+    val data = ModifiersData(ErgoTransaction.modifierTypeId, Map(id -> bytes))
+    synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(data)), Some(from))
+  }
+
+  /**
+    * Bytes after a received transaction are not covered by its id. The node keeps, relays and weighs the transaction
+    * by the bytes it was parsed from.
+    */
+  property("NodeViewSynchronizer: bytes after a received transaction are not kept, relayed or counted in its fee per byte") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val (tx, wus) = feePayingTransaction()
+      val txBytes = tx.bytes
+      val padded = txBytes ++ Array.fill[Byte](1000)(0)
+      ErgoTransactionSerializer.parseBytes(padded).id shouldBe tx.id
+
+      val (synchronizer, holderProbe) = txSynchronizer(ctx, ErgoMemPool.empty(settings))
+      deliveryTracker.setRequested(ErgoTransaction.modifierTypeId, tx.id, peer)(_ => Cancellable.alreadyCancelled)
+      deliverTransaction(synchronizer, tx.id, padded, peer)
+      val received = holderProbe.fishForSpecificMessage(3.seconds) {
+        case ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote(utx) => utx
+      }
+      received.id shouldBe tx.id
+      received.transactionBytes.map(_.toSeq) shouldBe Some(txBytes.toSeq)
+
+      // fee per byte: the received transaction is weighted as the same transaction with its own bytes
+      val feePerByte = settings.copy(nodeSettings = settings.nodeSettings.copy(mempoolSorting = SortingOption.FeePerByte))
+      val (pool, outcome) = ErgoMemPool.empty(feePerByte).process(received, wus)
+      outcome shouldBe a[ProcessingOutcome.Accepted]
+      val (ownBytesPool, _) = ErgoMemPool.empty(feePerByte).process(UnconfirmedTransaction(tx, None), wus)
+      pool.weightedTransactionIds(1).map(_.weight) shouldBe ownBytesPool.weightedTransactionIds(1).map(_.weight)
+
+      // relay: a peer asking for the transaction gets the bytes it was parsed from
+      synchronizer ! ChangedMempool(pool)
+      synchronizer ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(ErgoTransaction.modifierTypeId, Seq(tx.id)))), Some(peer))
+      val served = pchProbe.fishForSpecificMessage(3.seconds) {
+        case Message(_, Right(md: ModifiersData), _) if md.typeId == ErgoTransaction.modifierTypeId => md.modifiers
+      }
+      served.get(tx.id).map(_.toSeq) shouldBe Some(txBytes.toSeq)
+    }
+  }
+
+  property("NodeViewSynchronizer: a received transaction without bytes after it keeps the received bytes") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val (tx, _) = feePayingTransaction()
+      val bytes = tx.bytes
+      val (synchronizer, holderProbe) = txSynchronizer(ctx, ErgoMemPool.empty(settings))
+      deliveryTracker.setRequested(ErgoTransaction.modifierTypeId, tx.id, peer)(_ => Cancellable.alreadyCancelled)
+      deliverTransaction(synchronizer, tx.id, bytes, peer)
+      val received = holderProbe.fishForSpecificMessage(3.seconds) {
+        case ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote(utx) => utx
+      }
+      received.transactionBytes.map(_.toSeq) shouldBe Some(bytes.toSeq)
     }
   }
 

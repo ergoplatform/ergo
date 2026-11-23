@@ -1,5 +1,7 @@
 package org.ergoplatform.network
 
+import java.nio.ByteBuffer
+
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
@@ -36,13 +38,14 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+import scorex.util.serialization.VLQByteBufferReader
 import sigma.VersionContext
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Random, Success}
+import scala.util.{Failure, Random, Success, Try}
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
@@ -879,17 +882,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
     } else {
       // actual tree version is properly set in ErgoTreeSerializer inside
-      val parseResult = VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
+      val parseResult = VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(parseTransaction(bytes))
       parseResult match {
-        case Success(tx) if id == tx.id =>
-          val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
+        case Success((tx, txBytes)) if id == tx.id =>
+          if (txBytes.length < bytes.length) {
+            log.info(s"Dropping ${bytes.length - txBytes.length} bytes after transaction ${encoder.encodeId(id)} " +
+                      s"from ${remote.toString}")
+          }
+          val utx = UnconfirmedTransaction(tx, txBytes, Some(remote))
           txsInProcessing.getOrElseUpdate(remote, mutable.Set.empty[ModifierId]) += id
           viewHolderRef ! TransactionFromRemote(utx)
         case _ =>
           // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
           penalizeMisbehavingPeer(remote)
           log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} " +
-                    s"from ${remote.toString}, reason: ${parseResult.map(_.id)}")
+                    s"from ${remote.toString}, reason: ${parseResult.map { case (tx, _) => tx.id }}")
       }
     }
   }
@@ -1878,6 +1885,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+
+  /**
+    * Parses a transaction and returns it with the bytes it was parsed from, that is `bytes` without any bytes after
+    * the transaction. The transaction id does not cover bytes after it, so they are not kept, relayed to peers or
+    * counted in the transaction's size.
+    */
+  private[network] def parseTransaction(bytes: Array[Byte]): Try[(ErgoTransaction, Array[Byte])] = Try {
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val tx = ErgoTransactionSerializer.parse(reader)
+    val parsedBytes = if (reader.position == bytes.length) bytes else java.util.Arrays.copyOf(bytes, reader.position)
+    tx -> parsedBytes
+  }
 
   /**
     * Max number of declined transaction ids kept to not ask peers for the same transactions again. The table is

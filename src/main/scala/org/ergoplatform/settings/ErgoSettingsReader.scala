@@ -1,7 +1,6 @@
 package org.ergoplatform.settings
 
-import java.io.{File, FileOutputStream}
-import java.nio.channels.Channels
+import java.io.File
 import ch.qos.logback.classic.{Level, LoggerContext}
 import org.slf4j.{Logger, LoggerFactory}
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
@@ -63,8 +62,8 @@ object ErgoSettingsReader extends ScorexLogging
 
   // Helper method to read user-provided `configFile` with network-specific `fallbackConfig`
   // to be used for default fallback values before reference.conf (which is the last resort)
-  private def configWithOverrides(configFile: File, fallbackConfig: Option[File]) = {
-    val firstFallBack = fallbackConfig.map(ConfigFactory.parseFile).getOrElse(ConfigFactory.empty())
+  private def configWithOverrides(configFile: File, fallbackConfig: Option[Config]) = {
+    val firstFallBack = fallbackConfig.getOrElse(ConfigFactory.empty())
 
     val cfg = ConfigFactory.parseFile(configFile)
 
@@ -104,28 +103,14 @@ object ErgoSettingsReader extends ScorexLogging
 
   private def readConfig(args: Args): Config = {
 
-    val networkConfigFileOpt = args.networkTypeOpt
+    // The network config is parsed from the first classpath resource of that name. It is not copied to a file
+    // first: a copy at a fixed name in java.io.tmpdir is shared by every process on the host that uses the same
+    // temp directory.
+    val networkConfigOpt = args.networkTypeOpt
       .flatMap { networkType =>
         val confName = s"${networkType.verboseName}.conf"
         val classLoader = ClassLoader.getSystemClassLoader
-        val destDir = System.getProperty("java.io.tmpdir") + "/"
-
-        Option(classLoader.getResourceAsStream(confName))
-          .map { stream =>
-            val source = Channels.newChannel(stream)
-            val fileOut = new File(destDir, confName)
-            val dest = new FileOutputStream(fileOut)
-            dest.getChannel.transferFrom(source, 0, Long.MaxValue)
-
-            source.close()
-            dest.close()
-
-            sys.addShutdownHook {
-              new File(destDir, confName).delete
-            }
-
-            fileOut
-          }
+        Option(classLoader.getResource(confName)).map(url => ConfigFactory.parseURL(url))
       }
 
     val userConfigFileOpt = for {
@@ -134,21 +119,21 @@ object ErgoSettingsReader extends ScorexLogging
       if file.exists
     } yield file
 
-    networkConfigFileOpt.flatMap(_ => args.networkTypeOpt).fold(log.warn("Running without network config"))(
+    networkConfigOpt.flatMap(_ => args.networkTypeOpt).fold(log.warn("Running without network config"))(
       x => log.info(s"Running in ${x.verboseName} network mode"))
 
-    (networkConfigFileOpt, userConfigFileOpt) match {
+    (networkConfigOpt, userConfigFileOpt) match {
       // if no user config is supplied, the library will handle overrides/application/reference automatically
-      case (Some(networkConfigFile), None) =>
+      case (Some(networkConfig), None) =>
         log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS!")
         ConfigFactory
           .defaultOverrides()
-          .withFallback(ConfigFactory.parseFile(networkConfigFile))
+          .withFallback(networkConfig)
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
       // application config needs to be resolved wrt both system properties *and* user-supplied config.
-      case (Some(networkConfigFile), Some(file)) =>
-        configWithOverrides(file, Some(networkConfigFile))
+      case (Some(networkConfig), Some(file)) =>
+        configWithOverrides(file, Some(networkConfig))
       case (None, Some(file)) =>
         configWithOverrides(file, None)
       case (None, None) =>

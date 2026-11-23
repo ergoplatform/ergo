@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.{TestActorRef, TestProbe}
-import org.ergoplatform.Input
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -512,6 +512,116 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Received
       }
       ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  // replaces the fixture's synchronizer by one whose view holder is a probe, to read the transactions it forwards
+  private def txSynchronizer(ctx: Synchronizer2Fixture, pool: ErgoMemPool): (ActorRef, TestProbe) = {
+    import ctx._
+    val stopProbe = TestProbe("TxSynchronizerStopProbe")
+    stopProbe.watch(synchronizerMockRef)
+    system.stop(synchronizerMockRef)
+    stopProbe.expectTerminated(synchronizerMockRef)
+
+    val holderProbe = TestProbe("TxHolderProbe")
+    val synchronizer = system.actorOf(Props(new SynchronizerMock(
+      ncProbe.ref,
+      holderProbe.ref,
+      ErgoSyncInfoMessageSpec,
+      settings,
+      syncTracker,
+      deliveryTracker)))
+    holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+    synchronizer ! ChangedHistory(viewHistory)
+    synchronizer ! ChangedMempool(pool)
+    synchronizer -> holderProbe
+  }
+
+  // a fee-paying transaction spending a genesis box guarded by `true`, with an empty proof
+  private def feePayingTransaction(): ErgoTransaction = {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+    val inputBox = wus.takeBoxes(100).find(_.ergoTree == TrueTree).get
+    val feeOut = new ErgoBoxCandidate(inputBox.value, settings.chainSettings.monetary.feeProposition, creationHeight = 0)
+    ErgoTransaction(
+      IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, ContextExtension.empty))),
+      IndexedSeq(feeOut))
+  }
+
+  private def deliverTransaction(synchronizer: ActorRef, id: ModifierId, bytes: Array[Byte], from: ConnectedPeer): Unit = {
+    val data = ModifiersData(ErgoTransaction.modifierTypeId, Map(id -> bytes))
+    synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(data)), Some(from))
+  }
+
+  /**
+    * A delivery over `maxTransactionSize` is not parsed, so it does not show that the transaction with the declared id is
+    * too big. The sender is penalized, and the id can still be downloaded from another peer.
+    */
+  property("NodeViewSynchronizer: a transaction delivery over maxTransactionSize does not make its id invalid") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val tx = feePayingTransaction()
+      val maxSize = settings.nodeSettings.maxTransactionSize
+      val oversized = tx.bytes ++ Array.fill[Byte](maxSize + 1 - tx.bytes.length)(0)
+      oversized.length shouldBe maxSize + 1
+
+      val (synchronizer, holderProbe) = txSynchronizer(ctx, ErgoMemPool.empty(settings))
+      deliveryTracker.setRequested(ErgoTransaction.modifierTypeId, tx.id, peer)(_ => Cancellable.alreadyCancelled)
+      deliverTransaction(synchronizer, tx.id, oversized, peer)
+      ncProbe.fishForSpecificMessage(3.seconds) {
+        case penalty: PenalizePeer => penalty
+      } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+      deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) should not be
+        scorex.core.network.ModifiersStatus.Invalid
+
+      // the request is released when its delivery check runs, as for a reply which does not parse
+      synchronizer ! CheckDelivery(peer, ErgoTransaction.modifierTypeId, tx.id)
+      eventually {
+        deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+
+      val otherPeer = ConnectedPeer(
+        connectionIdGen.sample.get.copy(remoteAddress = new InetSocketAddress("192.0.2.2", 9030)),
+        pchProbe.ref,
+        Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+      )
+      synchronizer ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(ErgoTransaction.modifierTypeId, Seq(tx.id)))), Some(otherPeer))
+      requestForModifierSent(ncProbe, ErgoTransaction.modifierTypeId, tx.id)
+
+      deliverTransaction(synchronizer, tx.id, tx.bytes, otherPeer)
+      holderProbe.fishForSpecificMessage(3.seconds) {
+        case ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote(utx) => utx.id
+      } shouldBe tx.id
+    }
+  }
+
+  /**
+    * Without the invalid mark, the id of a transaction delivered over `maxTransactionSize` is requested again on each
+    * announcement, also from the peer that sent it; each such delivery penalizes that peer again.
+    */
+  property("NodeViewSynchronizer: a peer that delivered a transaction over maxTransactionSize is asked for it again") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val tx = feePayingTransaction()
+      val maxSize = settings.nodeSettings.maxTransactionSize
+      val oversized = tx.bytes ++ Array.fill[Byte](maxSize + 1 - tx.bytes.length)(0)
+      val (synchronizer, _) = txSynchronizer(ctx, ErgoMemPool.empty(settings))
+      val announcement = Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(ErgoTransaction.modifierTypeId, Seq(tx.id)))), Some(peer))
+
+      (1 to 2).foreach { _ =>
+        synchronizer ! announcement
+        requestForModifierSent(ncProbe, ErgoTransaction.modifierTypeId, tx.id)
+        deliverTransaction(synchronizer, tx.id, oversized, peer)
+        ncProbe.fishForSpecificMessage(3.seconds) {
+          case penalty: PenalizePeer => penalty
+        } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+        synchronizer ! CheckDelivery(peer, ErgoTransaction.modifierTypeId, tx.id)
+      }
     }
   }
 

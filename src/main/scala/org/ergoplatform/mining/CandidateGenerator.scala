@@ -211,15 +211,23 @@ class CandidateGenerator(
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
-        CandidateGenerator.generateCandidate(
-          state.hr,
-          state.sr,
-          state.mpr,
-          effectiveMinerPk,
-          txsToInclude,
-          state.lastAppliedBlockTxs,
-          ergoSettings
+        // A broken store can make this call throw. If the exception left receive,
+        // the restarted actor would get the same readers and throw again, without end.
+        val generated = Try(
+          CandidateGenerator.generateCandidate(
+            state.hr,
+            state.sr,
+            state.mpr,
+            effectiveMinerPk,
+            txsToInclude,
+            state.lastAppliedBlockTxs,
+            ergoSettings
+          )
         ) match {
+          case Success(result) => result
+          case Failure(ex)     => Some(Failure(ex))
+        }
+        generated match {
           case Some(Failure(ex)) =>
             log.error(s"Candidate generation failed", ex)
             senderOpt.foreach(

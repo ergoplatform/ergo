@@ -4,12 +4,12 @@ import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.{TestActorRef, TestProbe}
-import org.ergoplatform.Input
+import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
@@ -32,7 +32,7 @@ import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeers}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer, SendToPeers}
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.serialization.ErgoSerializer
@@ -512,6 +512,116 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Received
       }
       ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  // replaces the fixture's synchronizer by one whose view holder is a probe, to read the transactions it forwards
+  private def txSynchronizer(ctx: Synchronizer2Fixture, pool: ErgoMemPool): (ActorRef, TestProbe) = {
+    import ctx._
+    val stopProbe = TestProbe("TxSynchronizerStopProbe")
+    stopProbe.watch(synchronizerMockRef)
+    system.stop(synchronizerMockRef)
+    stopProbe.expectTerminated(synchronizerMockRef)
+
+    val holderProbe = TestProbe("TxHolderProbe")
+    val synchronizer = system.actorOf(Props(new SynchronizerMock(
+      ncProbe.ref,
+      holderProbe.ref,
+      ErgoSyncInfoMessageSpec,
+      settings,
+      syncTracker,
+      deliveryTracker)))
+    holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+    synchronizer ! ChangedHistory(viewHistory)
+    synchronizer ! ChangedMempool(pool)
+    synchronizer -> holderProbe
+  }
+
+  // a fee-paying transaction spending a genesis box guarded by `true`, with an empty proof
+  private def feePayingTransaction(): ErgoTransaction = {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+    val inputBox = wus.takeBoxes(100).find(_.ergoTree == TrueTree).get
+    val feeOut = new ErgoBoxCandidate(inputBox.value, settings.chainSettings.monetary.feeProposition, creationHeight = 0)
+    ErgoTransaction(
+      IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, ContextExtension.empty))),
+      IndexedSeq(feeOut))
+  }
+
+  private def deliverTransaction(synchronizer: ActorRef, id: ModifierId, bytes: Array[Byte], from: ConnectedPeer): Unit = {
+    val data = ModifiersData(ErgoTransaction.modifierTypeId, Map(id -> bytes))
+    synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(data)), Some(from))
+  }
+
+  /**
+    * A delivery over `maxTransactionSize` is not parsed, so it does not show that the transaction with the declared id is
+    * too big. The sender is penalized, and the id can still be downloaded from another peer.
+    */
+  property("NodeViewSynchronizer: a transaction delivery over maxTransactionSize does not make its id invalid") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val tx = feePayingTransaction()
+      val maxSize = settings.nodeSettings.maxTransactionSize
+      val oversized = tx.bytes ++ Array.fill[Byte](maxSize + 1 - tx.bytes.length)(0)
+      oversized.length shouldBe maxSize + 1
+
+      val (synchronizer, holderProbe) = txSynchronizer(ctx, ErgoMemPool.empty(settings))
+      deliveryTracker.setRequested(ErgoTransaction.modifierTypeId, tx.id, peer)(_ => Cancellable.alreadyCancelled)
+      deliverTransaction(synchronizer, tx.id, oversized, peer)
+      ncProbe.fishForSpecificMessage(3.seconds) {
+        case penalty: PenalizePeer => penalty
+      } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+      deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) should not be
+        scorex.core.network.ModifiersStatus.Invalid
+
+      // the request is released when its delivery check runs, as for a reply which does not parse
+      synchronizer ! CheckDelivery(peer, ErgoTransaction.modifierTypeId, tx.id)
+      eventually {
+        deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+
+      val otherPeer = ConnectedPeer(
+        connectionIdGen.sample.get.copy(remoteAddress = new InetSocketAddress("192.0.2.2", 9030)),
+        pchProbe.ref,
+        Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+      )
+      synchronizer ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(ErgoTransaction.modifierTypeId, Seq(tx.id)))), Some(otherPeer))
+      requestForModifierSent(ncProbe, ErgoTransaction.modifierTypeId, tx.id)
+
+      deliverTransaction(synchronizer, tx.id, tx.bytes, otherPeer)
+      holderProbe.fishForSpecificMessage(3.seconds) {
+        case ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote(utx) => utx.id
+      } shouldBe tx.id
+    }
+  }
+
+  /**
+    * Without the invalid mark, the id of a transaction delivered over `maxTransactionSize` is requested again on each
+    * announcement, also from the peer that sent it; each such delivery penalizes that peer again.
+    */
+  property("NodeViewSynchronizer: a peer that delivered a transaction over maxTransactionSize is asked for it again") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val tx = feePayingTransaction()
+      val maxSize = settings.nodeSettings.maxTransactionSize
+      val oversized = tx.bytes ++ Array.fill[Byte](maxSize + 1 - tx.bytes.length)(0)
+      val (synchronizer, _) = txSynchronizer(ctx, ErgoMemPool.empty(settings))
+      val announcement = Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(ErgoTransaction.modifierTypeId, Seq(tx.id)))), Some(peer))
+
+      (1 to 2).foreach { _ =>
+        synchronizer ! announcement
+        requestForModifierSent(ncProbe, ErgoTransaction.modifierTypeId, tx.id)
+        deliverTransaction(synchronizer, tx.id, oversized, peer)
+        ncProbe.fishForSpecificMessage(3.seconds) {
+          case penalty: PenalizePeer => penalty
+        } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+        synchronizer ! CheckDelivery(peer, ErgoTransaction.modifierTypeId, tx.id)
+      }
     }
   }
 
@@ -1034,6 +1144,65 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  private def downloadPeer(handler: ActorRef): ConnectedPeer = ConnectedPeer(
+    connectionIdGen.sample.get,
+    handler,
+    Some(PeerInfo(defaultPeerSpec.copy(features = Seq(ModePeerFeature(
+      StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept))), System.currentTimeMillis()))
+  )
+
+  /**
+    * Block sections are retried, after a missed delivery, from the download peers other than the one that missed it,
+    * if there are any. Over 20 sections with two download peers, a choice that may return the peer that missed picks
+    * it about 10 times.
+    */
+  property("NodeViewSynchronizer: checkDelivery asks another download peer for a block section not delivered on time") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val missedPeer = downloadPeer(pchProbe.ref)
+      val otherPeer = downloadPeer(pchProbe.ref)
+      otherPeer.connectionId.remoteAddress should not be missedPeer.connectionId.remoteAddress
+      syncTracker.updateStatus(missedPeer, org.ergoplatform.consensus.Equal, Some(10))
+      syncTracker.updateStatus(otherPeer, org.ergoplatform.consensus.Equal, Some(10))
+
+      val typeId = BlockTransactions.modifierTypeId
+      val retriedFrom = (1 to 20).map { i =>
+        val id = bytesToId(Array.fill(32)(i.toByte))
+        deliveryTracker.setRequested(typeId, id, missedPeer)(_ => Cancellable.alreadyCancelled)
+        synchronizerMockRef ! CheckDelivery(missedPeer, typeId, id)
+        val to = ncProbe.fishForSpecificMessage(3.seconds) {
+          case SendToNetwork(msg, SendToPeer(p)) if msg.spec.messageCode == RequestModifierSpec.messageCode => p
+        }
+        // the synchronizer records the retry in the tracker, which is not thread-safe, after sending it; wait for
+        // that record (at the chosen peer, one check; this thread's own record has none) before the next section
+        eventually {
+          deliveryTracker.getRequestedInfo(typeId, id).map(ri => (ri.peer, ri.checks)) shouldBe Some((to, 1))
+        }
+        to
+      }
+      retriedFrom.count(_ == missedPeer) shouldBe 0
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery asks the same peer again for a block section when it is the only download peer") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val onlyPeer = downloadPeer(pchProbe.ref)
+      syncTracker.updateStatus(onlyPeer, org.ergoplatform.consensus.Equal, Some(10))
+
+      val typeId = BlockTransactions.modifierTypeId
+      val id = bytesToId(Array.fill(32)(1: Byte))
+      deliveryTracker.setRequested(typeId, id, onlyPeer)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(onlyPeer, typeId, id)
+      val retriedFrom = ncProbe.fishForSpecificMessage(3.seconds) {
+        case SendToNetwork(msg, SendToPeer(to)) if msg.spec.messageCode == RequestModifierSpec.messageCode => to
+      }
+      retriedFrom shouldBe onlyPeer
+    }
+  }
+
   property("NodeViewSynchronizer: checkDelivery should fallback to Equal peers after many attempts") {
     withFixture2 { ctx =>
       import ctx._
@@ -1303,11 +1472,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  // the ids in the first ModifiersData sent to the peer that contains `marker`
-  private def servedWith(pchProbe: TestProbe, marker: ModifierId): Seq[ModifierId] =
+  // the ids in the next ModifiersData sent to the peer
+  private def nextServed(pchProbe: TestProbe): Seq[ModifierId] =
     pchProbe.fishForSpecificMessage(10.seconds) {
-      case Message(_, Right(served: ModifiersData), _) if served.modifiers.contains(marker) => served.modifiers.keys.toSeq
+      case Message(_, Right(served: ModifiersData), _) => served.modifiers.keys.toSeq
     }
+
+  private def request(ctx: Synchronizer2Fixture, typeId: NetworkObjectTypeId.Value,
+                      id: ModifierId): Unit =
+    ctx.synchronizerMockRef ! Message(RequestModifierSpec, Left(RequestModifierSpec.toBytes(InvData(typeId, Seq(id)))),
+      Some(ctx.peer))
 
   /**
     * A peer that asks for a block the node has just announced must get it, also before the node view holder has
@@ -1376,6 +1550,29 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: a second mined block replaces the first one in memory") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val wus = (0 until 3).foldLeft(WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)) {
+        (w, _) => w.applyModifier(statefulyValidFullBlock(w), None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val next = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+
+      // the node's own miner has at most one mined, unapplied block (CandidateGenerator takes a solution only while
+      // none is pending), so one is kept; a block posted through `POST /blocks` replaces it the same way
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      synchronizerMockRef ! NewBlockMined(next.header, next.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+
+      // requests are answered in order, as in the tests below
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
+      request(ctx, Header.modifierTypeId, next.header.id)
+      nextServed(pchProbe) shouldBe Seq(next.header.id)
+    }
+  }
+
   property("NodeViewSynchronizer: a newly mined block is no longer served from memory once applied") {
     withFixture2 { ctx =>
       import ctx._
@@ -1394,15 +1591,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // is still answered can only come from the in-memory copy
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
-      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
-      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      // a request that finds nothing sends nothing, and requests are answered in order: the first reply is the answer
+      // to a later request for a block mined next, so nothing was sent for this one (exact, not a time window)
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.header.id)
-      served should contain(marker.header.id)
-      served should not contain newBlock.header.id
+      request(ctx, Header.modifierTypeId, marker.header.id)
+      nextServed(pchProbe) shouldBe Seq(marker.header.id)
     }
   }
 
@@ -1423,15 +1617,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! SemanticallyFailedModification(
         BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
 
-      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
-      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      // a request that finds nothing sends nothing, and requests are answered in order: the first reply is the answer
+      // to a later request for a block mined next, so nothing was sent for this one (exact, not a time window)
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.header.id)
-      served should contain(marker.header.id)
-      served should not contain newBlock.header.id
+      request(ctx, Header.modifierTypeId, marker.header.id)
+      nextServed(pchProbe) shouldBe Seq(marker.header.id)
     }
   }
 
@@ -1445,7 +1636,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         wus = wus.applyModifier(block, None)(_ => ()).get
       }
       val newBlock = statefulyValidFullBlock(wus)
-      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }
@@ -1454,21 +1644,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // copy. Its sections are not held yet
       synchronizerMockRef ! SyntacticallySuccessfulModifier(Header.modifierTypeId, newBlock.header.id)
 
-      // each request goes together with the second mined, still unapplied block, as in the tests above
-      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val servedHeaders = servedWith(pchProbe, marker.header.id)
-      servedHeaders should contain(marker.header.id)
-      servedHeaders should not contain newBlock.header.id
-
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(BlockTransactions.modifierTypeId,
-          Seq(newBlock.blockTransactions.id, marker.blockTransactions.id)))),
-        Some(peer))
-      val servedTransactions = servedWith(pchProbe, marker.blockTransactions.id)
-      servedTransactions should contain(newBlock.blockTransactions.id)
+      // requests are answered in order, as in the tests above: the first reply is the one to the later request for the
+      // block's transactions, which are still served from memory, so nothing was sent for the header
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
+      request(ctx, BlockTransactions.modifierTypeId, newBlock.blockTransactions.id)
+      nextServed(pchProbe) shouldBe Seq(newBlock.blockTransactions.id)
     }
   }
 
@@ -1491,14 +1671,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! SemanticallyFailedModification(
         BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
 
-      // the rest of the block goes too; requested together with the second mined, still unapplied block
+      // the rest of the block goes too; requests are answered in order, as in the tests above
+      request(ctx, Extension.modifierTypeId, newBlock.extension.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Extension.modifierTypeId, Seq(newBlock.extension.id, marker.extension.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.extension.id)
-      served should contain(marker.extension.id)
-      served should not contain newBlock.extension.id
+      request(ctx, Extension.modifierTypeId, marker.extension.id)
+      nextServed(pchProbe) shouldBe Seq(marker.extension.id)
     }
   }
 
@@ -2509,4 +2686,33 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  // A transaction request that is not delivered in time is cleared without penalty (unlike a block section, which is
+  // re-requested and may penalise), so a later Inv for the same transaction from another peer re-requests it. Ergo
+  // keeps no announcer list, so clearing the request is what makes that recovery possible. This locks that behaviour.
+  property("NodeViewSynchronizer: a timed-out transaction request is cleared without penalty and re-requested from another announcer") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val announcerA = newPeer
+      val announcerB = newPeer
+      val tx = dummyDeclinedTx()
+
+      // A announces the tx; the node requests it from A
+      invTxAndExpectRequest(announcerA, tx)
+      eventually {
+        deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+
+      // the request times out: for a transaction the node forgets it (clears Requested) and does not penalize A
+      synchronizerRef ! CheckDelivery(announcerA, ErgoTransaction.modifierTypeId, tx.id)
+      eventually {
+        deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      val afterTimeout = ncProbe.receiveWhile(max = 1.second, idle = 200.millis) { case m => m }
+      afterTimeout.collect { case PenalizePeer(_, p) => p } shouldBe empty
+
+      // B later announces the same tx; the node requests it from B
+      invTxAndExpectRequest(announcerB, tx)
+    }
+  }
 }

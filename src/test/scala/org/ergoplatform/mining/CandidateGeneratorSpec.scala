@@ -1695,6 +1695,52 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "reply with an error and not restart when the state is broken" in new TestKit(
+    ActorSystem()
+  ) {
+    try {
+      val testDir =
+        s"${defaultSettings.directory}-bad-state-${System.currentTimeMillis()}"
+      val settings           = testSettings(testDir)
+      val readersHolderProbe = TestProbe()
+      val senderProbe        = TestProbe()
+
+      val (us, _) = createUtxoState(settings)
+      // as with a store that misses a node of the AVL tree
+      val brokenState =
+        new UtxoState(us.persistentProver, us.version, us.store, settings) {
+          override def emissionBoxOpt: Option[ErgoBox] =
+            throw new NoSuchElementException("Simulating a missing state node")
+        }
+      val history = HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        stateType          = StateType.Utxo,
+        PoPoWBootstrap     = false,
+        blocksToKeep       = 100
+      )
+
+      val candidateGenerator = CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderProbe.ref,
+        TestProbe().ref,
+        settings
+      )
+      readersHolderProbe.expectMsg(GetReaders)
+      val readers = Readers(history, brokenState, ErgoMemPool.empty(settings), walletStub)
+      readersHolderProbe.reply(readers)
+
+      val request = GenerateCandidate(Seq.empty, reply = true, forced = true)
+      candidateGenerator.tell(request, senderProbe.ref)
+      val error = senderProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Error(e) => e
+      }
+      error.getMessage should include("Simulating a missing state node")
+
+      // a restarted generator would ask for the readers again in preStart
+      readersHolderProbe.expectNoMessage(500.millis)
+    } finally system.terminate()
+  }
+
   /**
     * A candidate generator on a fresh chain of its own for the solved-block cases below.
     */

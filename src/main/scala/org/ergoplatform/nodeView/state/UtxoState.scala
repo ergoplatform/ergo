@@ -47,6 +47,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     persistentProver.digest
   }
 
+  /** After a `Failure`, discard this receiver: rollback may already have mutated the shared prover. */
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
@@ -54,6 +55,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
+          val actualRoot = p.digest
+          require(
+            actualRoot.sameElements(rootHash),
+            s"Unexpected root digest after rollback: expected=${Algos.encoder.encode(rootHash)}, " +
+              s"actual=${Algos.encoder.encode(actualRoot)}"
+          )
           new UtxoState(p, version, store, ergoSettings)
         }
         rollbackResult

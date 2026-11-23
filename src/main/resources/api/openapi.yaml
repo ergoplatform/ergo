@@ -2094,8 +2094,8 @@ components:
       properties:
         msg:
           type: string
-          description: Base16-encoded block header bytes without PoW solution
-          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+          description: Base16-encoded Blake2b256 hash of the serialized block header without its PoW solution.
+          example: '6cb37d0a202bc2984f43de003cbc5558804db45798d0fc8faae7390b96d42d15'
         b:
           type: integer
           description: Work target value

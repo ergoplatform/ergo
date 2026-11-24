@@ -48,7 +48,8 @@ object UnconfirmedTransaction {
 
   def apply(tx: ErgoTransaction, source: Option[ConnectedPeer]): UnconfirmedTransaction = {
     val now = System.currentTimeMillis()
-    new UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes), source)
+    // relayed to peers (e.g. a transaction of a rolled-back block), in the form its id commits to
+    new UnconfirmedTransaction(tx, None, now, now, Some(ErgoTransaction.withIdVersions(tx)(tx.bytes)), source)
   }
 
   def apply(tx: ErgoTransaction, txBytes: Array[Byte], source: Option[ConnectedPeer]): UnconfirmedTransaction = {

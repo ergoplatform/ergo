@@ -514,9 +514,11 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       tx.flatMap { case (unsignedTx, inputs, dataInputs) =>
         state.walletVars.proverOpt match {
           case Some(prover) =>
-              prover.sign(unsignedTx, inputs, dataInputs, state.stateContext, TransactionHintsBag.empty)
-                .map(ErgoTransaction.apply)
-                .fold(
+              // signed, and its id computed, at the versions a block holding it is parsed at
+              ErgoTransaction.withV6BlockVersions {
+                prover.sign(unsignedTx, inputs, dataInputs, state.stateContext, TransactionHintsBag.empty)
+                  .map(ErgoTransaction.apply)
+              }.fold(
                   e => Failure(new Exception(s"Failed to sign boxes due to ${e.getMessage}: $inputs", e)),
                   tx => Success(tx))
           case None =>
@@ -710,9 +712,12 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     val proverSecrets = proverOpt.map(_.secretKeys).getOrElse(Seq.empty)
     val secretsWrapped = secrets.map(_.key).toIndexedSeq
     val secretsProver = ErgoProvingInterpreter(secretsWrapped ++ proverSecrets, parameters)
-    secretsProver
-      .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext, hints)
-      .map(ErgoTransaction.apply)
+    // signed, and its id computed, at the versions a block holding it is parsed at
+    ErgoTransaction.withV6BlockVersions {
+      secretsProver
+        .sign(tx, boxesToSpend.toIndexedSeq, dataBoxes.toIndexedSeq, stateContext, hints)
+        .map(ErgoTransaction.apply)
+    }
   }
 
 }

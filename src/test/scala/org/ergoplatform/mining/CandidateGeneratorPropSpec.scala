@@ -280,8 +280,9 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       missing.inputs.foreach(in => base.boxById(in.boxId) shouldBe empty)
       val oversizedEmission = ErgoTransaction(missing.inputs, missing.dataInputs,
         IndexedSeq.fill(32)(prioritized.outputCandidates.head))
-      val limit = BlockTransactions.sizeOf(Seq(prioritized), 1.toByte)
-      BlockTransactions.sizeOf(Seq(oversizedEmission), 1.toByte) should be > limit
+      val headerId = bytesToId(Array.fill(32)(0.toByte))
+      val limit = BlockTransactions(headerId, 1.toByte, Seq(prioritized)).bytes.length
+      BlockTransactions(headerId, 1.toByte, Seq(oversizedEmission)).bytes.length should be > limit
 
       val originalContext = base.stateContext
       val params = originalContext.currentParameters
@@ -348,7 +349,8 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
           )
           proofCalls shouldBe (failedProofs + 1)
           result.get._1.candidateBlock.transactions shouldBe emissionTx.toSeq
-          BlockTransactions.sizeOf(result.get._1.candidateBlock.transactions, 1.toByte) should be <=
+          BlockTransactions(bytesToId(Array.fill(32)(0.toByte)), 1.toByte,
+            result.get._1.candidateBlock.transactions).bytes.length should be <=
             originalContext.currentParameters.maxBlockSize
         } finally {
           history.closeStorage()

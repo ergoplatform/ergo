@@ -69,7 +69,6 @@ class BlockTransactionsSpec extends ErgoCorePropertyTest {
       section.bytes shouldBe original
       val payloadSize = txs.map(BlockTransactionsSerializer.transactionSize(_, version).toLong).sum
       BlockTransactionsSerializer.sectionSize(version, count, payloadSize) shouldBe original.length.toLong
-      BlockTransactions.sizeOf(txs, version) shouldBe original.length
       val parsed = BlockTransactionsSerializer.parseBytesTry(original).get
       parsed.blockVersion shouldBe version
       parsed.txs.map(_.id) shouldBe txs.map(_.id)
@@ -87,7 +86,6 @@ class BlockTransactionsSpec extends ErgoCorePropertyTest {
       section.bytes shouldBe original
       val payloadSize = BlockTransactionsSerializer.transactionSize(tx, version)
       BlockTransactionsSerializer.sectionSize(version, 1, payloadSize) shouldBe original.length.toLong
-      BlockTransactions.sizeOf(Seq(tx), version) shouldBe original.length
     }
   }
 
@@ -109,8 +107,9 @@ class BlockTransactionsSpec extends ErgoCorePropertyTest {
   property("section sizing does not force an uncached standalone size in the default version context") {
     val tx = VersionContext.withVersions(3, 3) { transaction(2, versionedRegister = true) }
     scala.util.Try(tx.size) shouldBe a[Failure[_]]
-    BlockTransactions.sizeOf(Seq(tx), 4.toByte) shouldBe originalBytes(
-      BlockTransactions(Header.GenesisParentId, 4.toByte, Seq(tx))).length
+    val payloadSize = BlockTransactionsSerializer.transactionSize(tx, 4.toByte)
+    BlockTransactionsSerializer.sectionSize(4.toByte, 1, payloadSize) shouldBe originalBytes(
+      BlockTransactions(Header.GenesisParentId, 4.toByte, Seq(tx))).length.toLong
   }
 
 }

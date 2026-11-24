@@ -1011,7 +1011,12 @@ object CandidateGenerator extends ScorexLogging {
 
   private[mining] def candidateSizeWithinLimit(
     txs: Seq[ErgoTransaction], blockVersion: Byte, maxBlockSize: Int
-  ): Try[Boolean] = Try(BlockTransactions.sizeOf(txs, blockVersion) <= maxBlockSize)
+  ): Try[Boolean] = Try {
+    assert(txs.nonEmpty)
+    val payloadSize = txs.iterator.map(tx =>
+      BlockTransactionsSerializer.transactionSize(tx, blockVersion).toLong).sum
+    BlockTransactionsSerializer.sectionSize(blockVersion, txs.size, payloadSize) <= maxBlockSize
+  }
 
   /** Decide whether transactions fit the cost limit and the full serialized section size limit. */
   private def correctLimits(

@@ -101,15 +101,6 @@ object BlockTransactions extends ApiCodecs {
 
   val modifierTypeId: NetworkObjectTypeId.Value = BlockTransactionsTypeId.value
 
-  /**
-    * Complete wire size, measured by the section writer in its existing block-version context.
-    *
-    * @param txs nonempty transaction sequence, as required by [[BlockTransactions]]
-    * @throws AssertionError if `txs` is empty
-    */
-  private[ergoplatform] def sizeOf(txs: Seq[ErgoTransaction], blockVersion: Version): Int =
-    BlockTransactions(Header.GenesisParentId, blockVersion, txs).bytes.length
-
   // Used in the miner when a BlockTransaction instance is not generated yet (because a header is not known)
   def transactionsRoot(txs: Seq[ErgoTransaction], blockVersion: Version): Digest32 = {
     if (blockVersion == Header.InitialVersion) {
@@ -175,7 +166,7 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     }
   }
 
-  // Internal incremental accounting uses the same writer and version rules as sizeOf.
+  // Incremental accounting reuses the full section's transaction and metadata writers.
   private[ergoplatform] def transactionSize(tx: ErgoTransaction, blockVersion: Version): Int = {
     val w = new VLQByteBufferWriter(new ByteArrayBuilder())
     serializeTransaction(tx, blockVersion, w)

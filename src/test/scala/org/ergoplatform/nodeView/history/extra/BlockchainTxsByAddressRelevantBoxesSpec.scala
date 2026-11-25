@@ -30,7 +30,9 @@ import scala.collection.mutable.ArrayBuffer
   * The index rows of one address are written by hand: an airdrop-like transaction with twenty
   * outputs, two of them to the address, transactions spending those two boxes, and a transaction
   * the address lists without a box of it (as rows left by earlier versions can). Two of the boxes
-  * of the address are in a box segment, the third in the row of the address.
+  * of the address are in a box segment, the third in the row of the address. Three outputs are fee
+  * outputs, which outputs listed for the address keep: one before the boxes of the address in its
+  * transaction, one after them and one in the transaction without a box of the address.
   */
 class BlockchainTxsByAddressRelevantBoxesSpec
   extends AnyFlatSpec
@@ -49,7 +51,9 @@ class BlockchainTxsByAddressRelevantBoxesSpec
     addressEncoder.fromProposition(ErgoTree.fromProposition(GE(Height, IntConstant(0)).toSigmaProp)).get
   private val watchedTree: ErgoTree = watched.script
   private val otherTree: ErgoTree = Constants.TrueTree
+  private val feeTree: ErgoTree = settings.chainSettings.monetary.feeProposition
   private val treeHash: ModifierId = hashErgoTree(watchedTree)
+  private val feeTreeHash: ModifierId = hashErgoTree(feeTree)
 
   private val block = chain.last.header
   private def txId(n: Int): ModifierId = bytesToId(Algos.hash("relevant boxes spec tx " + n))
@@ -66,6 +70,8 @@ class BlockchainTxsByAddressRelevantBoxesSpec
     Seq(25L) -> Seq(26L)
   )
   private val ownBoxes: Set[Long] = Set(5L, 17L, 22L)
+  /** Fee outputs, box 3 spent. */
+  private val feeBoxes: Set[Long] = Set(3L, 23L, 26L)
 
   /** Box number `n`, output `index` of transaction `creatingTx`. */
   private def indexedBox(n: Long, tree: ErgoTree, creatingTx: ModifierId, index: Int): IndexedErgoBox =
@@ -78,7 +84,8 @@ class BlockchainTxsByAddressRelevantBoxesSpec
     }.toMap
     (0L to 26L).map { n =>
       val (creatingTx, index) = created.getOrElse(n, (outsideTx, n.toInt))
-      n -> indexedBox(n, if (ownBoxes(n)) watchedTree else otherTree, creatingTx, index)
+      val tree = if (ownBoxes(n)) watchedTree else if (feeBoxes(n)) feeTree else otherTree
+      n -> indexedBox(n, tree, creatingTx, index)
     }.toMap
   }
 
@@ -93,11 +100,12 @@ class BlockchainTxsByAddressRelevantBoxesSpec
     row
   }
   private val boxSegment = IndexedErgoAddress(boxSegmentId(treeHash, 0), ArrayBuffer.empty[Long], ArrayBuffer(-5L, -17L))
+  private val feeRow = IndexedErgoAddress(feeTreeHash, ArrayBuffer.empty[Long], ArrayBuffer(-3L, 23L, 26L))
 
   private val rows: Array[ExtraIndex] =
     (boxRows.values ++ boxRows.values.map(b => NumericBoxIndex(b.globalIndex, b.id)) ++
       txRows ++ txRows.map(tx => NumericTxIndex(tx.globalIndex, tx.id)) ++
-      Seq(addressRow, boxSegment)).toArray
+      Seq(addressRow, boxSegment, feeRow)).toArray
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -126,7 +134,7 @@ class BlockchainTxsByAddressRelevantBoxesSpec
   private def expected(relevantInputs: Boolean, relevantOutputs: Boolean): Seq[(Seq[Long], Seq[Long])] =
     txBoxes.reverse.map { case (inputs, outputs) =>
       (if (relevantInputs) inputs.filter(ownBoxes) else inputs) ->
-        (if (relevantOutputs) outputs.filter(ownBoxes) else outputs)
+        (if (relevantOutputs) outputs.filter(n => ownBoxes(n) || feeBoxes(n)) else outputs)
     }
 
   private def get(params: String): Json = Get(query(params)) ~> route ~> check {
@@ -166,7 +174,23 @@ class BlockchainTxsByAddressRelevantBoxesSpec
     }
     val airdrop = filtered.last
     airdrop.hcursor.downField("outputs").as[Seq[Json]].toOption.get
-      .map(box => box.hcursor.downField("index").as[Int].toOption.get) shouldBe Seq(4, 16)
+      .map(box => box.hcursor.downField("index").as[Int].toOption.get) shouldBe Seq(2, 4, 16)
+  }
+
+  it should "keep the fee outputs among the outputs of the address, in their order" in {
+    val json = get("?relevantOutputs=true")
+    listed(json).map(_._2) shouldBe Seq(Seq(26L), Seq(24L).filter(ownBoxes), Seq(22L, 23L), Seq(3L, 5L, 17L))
+    // fee outputs are not kept among the inputs
+    listed(get("?relevantInputs=true")).flatMap(_._1).toSet shouldBe ownBoxes.intersect(txBoxes.flatMap(_._1).toSet)
+  }
+
+  it should "list only the outputs of the address when the fee address has no row" in {
+    history.historyStorage.removeExtraTry(Array(feeRow.id)).get
+    try {
+      listed(get("?relevantOutputs=true")).map(_._2) shouldBe txBoxes.reverse.map(_._2.filter(ownBoxes))
+    } finally {
+      history.historyStorage.insertExtraTry(Array.empty, Array(feeRow)).get
+    }
   }
 
   it should "page as without the parameters" in {

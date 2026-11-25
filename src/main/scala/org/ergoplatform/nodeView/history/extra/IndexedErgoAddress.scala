@@ -105,7 +105,9 @@ case class IndexedErgoAddress(treeHash: ModifierId,
   /**
     * Get a range of the transactions of this address, like [[retrieveTxs]], each listing among its
     * inputs, its outputs or both only the boxes of this address: those whose ErgoTree is the tree
-    * of this address, the boxes the indexer associates with it.
+    * of this address, the boxes the indexer associates with it. Outputs listed only for this
+    * address keep the fee outputs too, those guarded by `feeTree`, so the fee of a transaction
+    * stays visible.
     *
     * The boxes of other addresses are mostly not read, see [[ownBoxes]].
     *
@@ -115,54 +117,64 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @param offset          - items to skip from the start
     * @param limit           - items to retrieve
     * @param relevantInputs  - whether to list only the inputs of this address
-    * @param relevantOutputs - whether to list only the outputs of this address
+    * @param relevantOutputs - whether to list only the outputs of this address and the fee outputs
+    * @param feeTree         - tree of the fee outputs, see `MonetarySettings.feeProposition`
     * @return array of transactions with (filtered) bodies
     */
   def retrieveTxs(history: ErgoHistoryReader,
                   offset: Int,
                   limit: Int,
                   relevantInputs: Boolean,
-                  relevantOutputs: Boolean)(implicit segmentTreshold: Int): Array[IndexedErgoTransaction] =
+                  relevantOutputs: Boolean,
+                  feeTree: ErgoTree)(implicit segmentTreshold: Int): Array[IndexedErgoTransaction] =
     if (!relevantInputs && !relevantOutputs) {
       retrieveTxs(history, offset, limit)
     } else {
-      val own = ownBoxes(history)
       lazy val all = IndexedErgoTransaction.allBoxes(history)
-      val inputBoxes = if (relevantInputs) own else all
-      val outputBoxes = if (relevantOutputs) own else all
+      val inputBoxes = if (relevantInputs) ownBoxes(history) else all
+      val outputBoxes = if (relevantOutputs) ownBoxes(history, Seq(hashErgoTree(feeTree))) else all
       getFromSegments(history, offset, limit, txSegmentCount, txs, SegmentSerializer.txSegmentId, _.txs,
         (nums: ArrayBuffer[Long], h: ErgoHistoryReader) =>
           nums.map(n => NumericTxIndex.getTxByNumber(h, n).get.retrieveBody(h, inputBoxes, outputBoxes)).toArray)
     }
 
   /**
-    * Reads the boxes of this address among given box numbers, see [[retrieveTxs]] with filters.
+    * Reads the boxes of this address, and of the addresses of `alsoOf`, among given box numbers,
+    * in the order of the numbers, see [[retrieveTxs]] with filters.
     *
-    * Whether a box number is one of this address is looked up in the box numbers this address
-    * lists ([[boxLookup]]); only the boxes it finds are read, and kept if their tree is the tree of
-    * this address. A number the lookup cannot place, because a segment cannot be read, is read and
-    * kept by its tree as well.
+    * Whether a box number is one of these addresses is looked up in the box numbers each of them
+    * lists ([[boxLookup]]); only the boxes found are read, and kept if their tree is one of these
+    * trees. A number a lookup cannot place, because a segment cannot be read, is read and kept by
+    * its tree as well. An address of `alsoOf` without a row lists no box.
     *
-    * The lookup needs this object to be unchanged while it is used, and its box numbers to cover
-    * its transaction numbers. Both hold for a row read from the database: address rows are segments,
-    * which the database cache does not keep (`HistoryStorage.getExtraIndex`), so every read parses
-    * the row as the indexer last saved it, in one batch with its segments, and nobody else has it.
+    * The lookup needs the rows to be unchanged while it is used, and their box numbers to cover
+    * their transaction numbers. Both hold for rows read from the database: address rows are
+    * segments, which the database cache does not keep (`HistoryStorage.getExtraIndex`), so every
+    * read parses the row as the indexer last saved it, in one batch with its segments, and nobody
+    * else has it.
     *
     * @param history - database handle
-    * @return function from box numbers to the boxes of this address among them
+    * @param alsoOf  - hashes of the trees of other addresses whose boxes to keep
+    * @return function from box numbers to the boxes of these addresses among them
     */
-  private[extra] def ownBoxes(history: ErgoHistoryReader): Array[Long] => IndexedSeq[IndexedErgoBox] = {
-    val listed = boxLookup(history)
+  private[extra] def ownBoxes(history: ErgoHistoryReader,
+                              alsoOf: Seq[ModifierId] = Seq.empty): Array[Long] => IndexedSeq[IndexedErgoBox] = {
+    val others = alsoOf.distinct.filter(_ != treeHash)
+    val trees: Set[ModifierId] = others.toSet + treeHash
+    val lookups: Seq[Long => Option[Boolean]] = boxLookup(history) +: others.map { hash =>
+      history.typedExtraIndexById[IndexedErgoAddress](hash)
+        .fold[Long => Option[Boolean]](_ => Some(false))(_.boxLookup(history))
+    }
     nums => nums.flatMap { n =>
-      val lookup = listed(n)
-      if (lookup.contains(false)) {
-        None
-      } else {
-        NumericBoxIndex.getBoxByNumber(history, n).filter { iEb =>
-          val own = hashErgoTree(iEb.box.ergoTree) == treeHash
-          if (!own && lookup.isDefined) log.debug(s"Address $treeHash lists box $n of another tree")
-          own
-        }
+      // the first lookup which does not rule the number out, if any
+      lookups.iterator.map(_(n)).find(!_.contains(false)) match {
+        case None => None
+        case Some(listed) =>
+          NumericBoxIndex.getBoxByNumber(history, n).filter { iEb =>
+            val kept = trees.contains(hashErgoTree(iEb.box.ergoTree))
+            if (!kept && listed.isDefined) log.debug(s"Address $treeHash or ${others.mkString(",")} lists box $n of another tree")
+            kept
+          }
       }
     }
   }

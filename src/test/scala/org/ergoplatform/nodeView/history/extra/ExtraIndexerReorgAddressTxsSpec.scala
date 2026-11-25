@@ -63,6 +63,14 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
   /** Spends a box of the watched address without an output for that address. */
   private def spend(box: ErgoBox): ErgoTransaction = move(box, Constants.TrueTree)
 
+  /** Spends a box of the watched address like [[spend]], paying a quarter of its value to `feeTree`. */
+  private def spendWithFee(box: ErgoBox, feeTree: ErgoTree): ErgoTransaction = {
+    val fee = box.value / 4
+    ErgoTransaction(IndexedSeq(Input(box.id, ProverResult.empty)), IndexedSeq.empty, IndexedSeq(
+      new ErgoBoxCandidate(box.value - fee, Constants.TrueTree, box.creationHeight, box.additionalTokens),
+      new ErgoBoxCandidate(fee, feeTree, box.creationHeight)))
+  }
+
   /** Transactions of `chain` in the order the indexer numbers them, with the height of their block. */
   private def numbered(chain: Seq[ErgoFullBlock]): Seq[(ErgoTransaction, Int)] =
     chain.flatMap(block => block.blockTransactions.txs.map(_ -> block.header.height))
@@ -110,15 +118,19 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
   /**
     * Compares the transactions of every address of `chain` read with only the inputs, the outputs
     * or both of the address (`relevantInputs` and `relevantOutputs` of the API) with the full
-    * transactions filtered by the tree of the address: they have to list the same boxes. The
+    * transactions filtered by the tree of the address, the outputs also keeping the fee outputs:
+    * they have to list the same boxes. The
     * address has to place every box number of its transactions without falling back to reading
-    * boxes (its box lookup answers for each).
+    * boxes (its box lookup answers for each), and the fee address has to list every fee output of
+    * them.
     *
     * @return the differences found, empty if the filtered transactions are the full ones filtered by tree
     */
-  private def relevantBoxDifferences(history: ErgoHistory, chain: Seq[ErgoFullBlock])
+  private def relevantBoxDifferences(history: ErgoHistory, chain: Seq[ErgoFullBlock], feeTree: ErgoTree)
                                     (implicit segmentThreshold: Int): Seq[String] = {
     val addresses = numbered(chain).flatMap(_._1.outputs).map(box => hashErgoTree(box.ergoTree)).distinct
+    val feeTreeHash = hashErgoTree(feeTree)
+    val feeLookup = history.typedExtraIndexById[IndexedErgoAddress](feeTreeHash).map(_.boxLookup(history))
     type Listed = (ModifierId, Seq[Long], Seq[Long])
     def numbers(txs: Array[IndexedErgoTransaction]): Seq[Listed] =
       txs.toSeq.map(tx => (tx.id, tx.inputs.map(_.globalIndex), tx.outputs.map(_.globalIndex)))
@@ -128,16 +140,19 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
           val full = row.retrieveTxs(history, 0, Int.MaxValue)
           val own = full.flatMap(tx => tx.inputs ++ tx.outputs)
             .filter(box => hashErgoTree(box.box.ergoTree) == address).map(_.globalIndex).toSet
+          val fee = full.flatMap(_.outputs).filter(box => hashErgoTree(box.box.ergoTree) == feeTreeHash).map(_.globalIndex).toSet
           val fullListed = numbers(full)
           val lookup = row.boxLookup(history)
           val unplaced = full.flatMap(tx => tx.inputNums ++ tx.outputNums).filter(n => lookup(n).isEmpty)
+          val unlistedFees = fee.filterNot(n => feeLookup.exists(_(n).contains(true)))
           val placement =
-            if (unplaced.isEmpty) None else Some(s"address $address cannot place box numbers ${unplaced.mkString(",")}")
+            (if (unplaced.isEmpty) None else Some(s"address $address cannot place box numbers ${unplaced.mkString(",")}")) ++
+              (if (unlistedFees.isEmpty) None else Some(s"the fee address does not list fee outputs ${unlistedFees.mkString(",")}"))
           val filtering = Seq(true -> true, true -> false, false -> true).flatMap { case (inputs, outputs) =>
             val expected = fullListed.map { case (id, in, out) =>
-              (id, if (inputs) in.filter(own) else in, if (outputs) out.filter(own) else out)
+              (id, if (inputs) in.filter(own) else in, if (outputs) out.filter(n => own(n) || fee(n)) else out)
             }
-            val read = numbers(row.retrieveTxs(history, 0, Int.MaxValue, inputs, outputs))
+            val read = numbers(row.retrieveTxs(history, 0, Int.MaxValue, inputs, outputs, feeTree))
             if (read == expected) None
             else Some(s"address $address with relevantInputs=$inputs, relevantOutputs=$outputs lists $read, expected $expected")
           }
@@ -159,6 +174,9 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
     import fixture._
 
     implicit val segmentThreshold: Int = segmentThresholdOpt.getOrElse(512)
+
+    /** Tree of the fee outputs, which outputs filtered by address keep. */
+    val feeTree: ErgoTree = settings.chainSettings.monetary.feeProposition
 
     /** Blocks the state has applied. */
     val chain: ArrayBuffer[ErgoFullBlock] = ArrayBuffer.empty[ErgoFullBlock]
@@ -341,7 +359,7 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
         if (reached.indexedHeaderId.contains(chain.last.id) && reached.rollbackTo == 0 && reached.globalTxIndex == txCount) None
         else Some(s"index is at height ${reached.indexedHeight}, block ${reached.indexedHeaderId}, with ${reached.globalTxIndex} transactions, " +
           s"rollback to ${reached.rollbackTo}; the applied chain is at height ${chain.last.header.height}, block ${chain.last.id}, with $txCount")
-      behind.toSeq ++ addressTxDifferences(getHistory, chain) ++ relevantBoxDifferences(getHistory, chain)
+      behind.toSeq ++ addressTxDifferences(getHistory, chain) ++ relevantBoxDifferences(getHistory, chain, feeTree)
     }
   }
 
@@ -518,21 +536,28 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
       node.indexDifferences() shouldBe empty
       node.watchedRow.boxSegmentCount shouldBe 1
 
-      // boxes of the segment and of the row are spent, one of them back to the address
+      // boxes of the segment and of the row are spent, one of them back to the address, one paying a fee
       val fork = node.chain.last
-      val abandoned = node.branch(fork)(state => node.ordinaryTxs(state) ++ Seq(spend(boxes(1)), move(boxes(9), watchedTree)))
+      val abandoned = node.branch(fork)(state =>
+        node.ordinaryTxs(state) ++ Seq(spendWithFee(boxes(1), node.feeTree), move(boxes(9), watchedTree)))
       node.deliver(abandoned)
       node.indexDifferences() shouldBe empty
 
-      // the better branch spends other boxes of the segment
-      node.deliver(node.branch(fork)(state => node.ordinaryTxs(state) ++ Seq(spend(boxes(2)), spend(boxes(3))), node.ordinary))
+      // the better branch spends other boxes of the segment, one paying a fee
+      val paying = spendWithFee(boxes(2), node.feeTree)
+      node.deliver(node.branch(fork)(state => node.ordinaryTxs(state) ++ Seq(paying, spend(boxes(3))), node.ordinary))
       node.indexDifferences() shouldBe empty
       node.watchedRow.boxSegmentCount shouldBe 1
 
-      val read = node.watchedRow.retrieveTxs(node.history, 0, 20, relevantInputs = true, relevantOutputs = true)
-      val spending = read.filter(_.outputs.isEmpty)
+      val read = node.watchedRow.retrieveTxs(node.history, 0, 20, relevantInputs = true, relevantOutputs = true,
+        node.feeTree)
+      def isFee(box: IndexedErgoBox): Boolean = box.box.ergoTree == node.feeTree
+      val spending = read.filter(_.outputs.forall(isFee))
       spending.map(_.inputs.map(_.id)).toSet shouldBe Set(Seq(bytesToId(boxes(2).id)), Seq(bytesToId(boxes(3).id)))
-      read.flatMap(_.outputs).map(_.id).toSet shouldBe boxes.map(box => bytesToId(box.id)).toSet
+      read.flatMap(_.outputs).filterNot(isFee).map(_.id).toSet shouldBe boxes.map(box => bytesToId(box.id)).toSet
+      // the fee output of the better branch only, after the output to another address it leaves out
+      read.flatMap(tx => tx.outputs.map(out => (tx.id, out.box.index.toInt, isFee(out)))).filter(_._3) shouldBe
+        Seq((paying.id, 1, true))
     }
   }
 

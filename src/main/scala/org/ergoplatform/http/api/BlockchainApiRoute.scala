@@ -59,6 +59,11 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     parameters("relevantInputs".as[Boolean] ? false, "relevantOutputs".as[Boolean] ? false)
 
   /**
+    * Tree of the fee outputs, which outputs filtered by address keep
+    */
+  private val feeTree: ErgoTree = ergoSettings.chainSettings.monetary.feeProposition
+
+  /**
     * Total number of boxes/transactions that can be requested at once to avoid too heavy requests ([[BlocksApiRoute.MaxHeaders]])
     */
   private val MaxItems = 16384
@@ -203,7 +208,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     getHistory.map { history =>
       getAddress(addr)(history) match {
         case Some(addr) =>
-          (addr.retrieveTxs(history, offset, limit, relevantInputs, relevantOutputs)(segmentTreshold), addr.txCount(segmentTreshold))
+          (addr.retrieveTxs(history, offset, limit, relevantInputs, relevantOutputs, feeTree)(segmentTreshold), addr.txCount(segmentTreshold))
         case None       => (Seq.empty[IndexedErgoTransaction], 0L)
       }
     }

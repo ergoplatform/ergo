@@ -6486,7 +6486,8 @@ paths:
           required: false
           description: >-
             if true, the outputs of each transaction list only the boxes guarded by the given
-            address (whose ErgoTree is the tree of the address)
+            address (whose ErgoTree is the tree of the address) and the fee outputs (guarded by
+            the fee proposition)
           schema:
             type: boolean
             default: false
@@ -6565,7 +6566,8 @@ paths:
           required: false
           description: >-
             if true, the outputs of each transaction list only the boxes guarded by the given
-            address (whose ErgoTree is the tree of the address)
+            address (whose ErgoTree is the tree of the address) and the fee outputs (guarded by
+            the fee proposition)
           schema:
             type: boolean
             default: false

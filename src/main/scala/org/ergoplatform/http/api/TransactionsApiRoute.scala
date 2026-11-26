@@ -305,10 +305,11 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
               getState.flatMap {
                 case state: UtxoStateReader =>
+                  val stateWithPool = state.withMempool(pool)
                   val txWithInputMatch =
                     allTxs
                       .filter(
-                        _.transaction.inputs.exists(i => state.boxById(i.boxId).exists(_.ergoTree.bytesHex == ergoTree))
+                        _.transaction.inputs.exists(i => stateWithPool.boxById(i.boxId).exists(_.ergoTree.bytesHex == ergoTree))
                       )
                       val allMatchingTxs = (txsWithOutputMatch ++ txWithInputMatch).toSeq.slice(offset, offset + limit)
                       Future.sequence(allMatchingTxs.map(getUnconfirmedTransactionWithResolvedInputs)).map(_.asJson)

@@ -75,4 +75,9 @@ class ScanningPredicateJsonCodecsSpecification extends ErgoCorePropertyTest {
     )
   }
 
+  property("unknown predicate returns DecodingFailure instead of MatchError") {
+    val j = parse("""{"predicate": "unknownPredicate"}""").toOption.get
+    scanningPredicateDecoder.decodeJson(j).isLeft shouldBe true
+  }
+
 }

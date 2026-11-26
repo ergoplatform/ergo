@@ -217,7 +217,7 @@ trait ApiCodecs extends JsonCodecs {
         case or: COR =>
           Map("op" -> op, "args" -> or.children.map(_.asJson).asJson).asJson
         case th: CTHRESHOLD =>
-          Map("op" -> op, "args" -> th.children.map(_.asJson).asJson).asJson
+          Map("op" -> op, "k" -> th.k.asJson, "args" -> th.children.map(_.asJson).asJson).asJson
       }
   })
 

@@ -68,6 +68,28 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     res.inputBoxes.map(_.value) shouldBe Seq(2000L)
   }
 
+  property("replace() stops once all replaceable boxes are dropped even with multiple tail candidates") {
+    val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)
+    val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
+    val targetBalance = 1303
+    val boxSelectionResult = new BoxSelectionResult(inputValues.map(trackedBox), Seq(), None)
+    val tail = Seq(trackedBox(2000), trackedBox(10), trackedBox(10), trackedBox(10))
+    val res = selector.replace(boxSelectionResult, tail, targetBalance, Map()).right.value
+    res.inputBoxes.length shouldBe 1
+    res.inputBoxes.map(_.value) shouldBe Seq(2000L)
+  }
+
+  property("replace() stops once candidate cannot exceed smallest remaining input with multiple candidates left") {
+    val selector = new ReplaceCompactCollectBoxSelector(3, 2, None)
+    val inputValues = Seq(100L, 1L, 2L, 200L, 1000L)
+    val targetBalance = 1303
+    val boxSelectionResult = new BoxSelectionResult(inputValues.map(trackedBox), Seq(), None)
+    val tail = Seq(trackedBox(300), trackedBox(200), trackedBox(50))
+    val res = selector.replace(boxSelectionResult, tail, targetBalance, Map()).right.value
+    res.inputBoxes.length shouldBe 3
+    res.inputBoxes.map(_.value) shouldBe Seq(200L, 1000L, 300L)
+  }
+
   property("compact() and replace() under select()"){
     val selector = new ReplaceCompactCollectBoxSelector(3, 3, None)
     val inputValues = (1 to 10).map(v => trackedBox(v))

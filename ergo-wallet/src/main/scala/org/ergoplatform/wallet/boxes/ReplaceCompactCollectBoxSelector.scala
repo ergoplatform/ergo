@@ -143,7 +143,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
     def replaceStep(candidates: Seq[T], toDrop: Seq[T]): Unit = {
       candidates match {
         case Seq() => ()
-        case Seq(cand)
+        case Seq(cand, _*)
           if BoxSelector.valueOf(cand, reemissionDataOpt) <=
             toDrop.headOption.map(b => BoxSelector.valueOf(b, reemissionDataOpt)).getOrElse(Long.MaxValue) =>
           ()

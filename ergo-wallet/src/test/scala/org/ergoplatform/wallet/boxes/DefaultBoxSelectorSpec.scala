@@ -279,4 +279,39 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
 
     cb2.get.value shouldBe reemissionAmt
   }
+
+  property("re-checks ERG balance after Phase 2 picks token boxes with extra change assets") {
+    val targetAsset = bytesToId(Blake2b256("target-asset"))
+    val extraAsset = bytesToId(Blake2b256("extra-asset"))
+
+    // Phase 1 meets exact target ERG with no tokens.
+    val box1 = testBox(MinBoxValue, TrueTree, StartHeight)
+    // Phase 2 satisfies targetAsset but carries an extra non-target asset and < MinBoxValue ERG.
+    val box2 = testBox(
+      MinBoxValue / 2,
+      TrueTree,
+      StartHeight,
+      Seq(targetAsset.toTokenId -> 1L, extraAsset.toTokenId -> 1L)
+    )
+    // Remaining ERG-only box can fund the required change box for extraAsset.
+    val box3 = testBox(2 * MinBoxValue, TrueTree, StartHeight)
+
+    val uBox1 = TrackedBox(parentTx, 0, Some(100), box1, Set(PaymentsScanId))
+    val uBox2 = TrackedBox(parentTx, 1, Some(100), box2, Set(PaymentsScanId))
+    val uBox3 = TrackedBox(parentTx, 2, Some(100), box3, Set(PaymentsScanId))
+
+    val res = selector.select(
+      Iterator(uBox1, uBox2, uBox3),
+      noFilter,
+      MinBoxValue,
+      Map(targetAsset -> 1L)
+    )
+
+    res shouldBe 'right
+    val selected = res.right.get
+    selected.inputBoxes shouldBe Seq(uBox1, uBox2, uBox3)
+    selected.changeBoxes.size shouldBe 1
+    selected.changeBoxes.head.value shouldBe (2 * MinBoxValue + MinBoxValue / 2)
+    selected.changeBoxes.head.tokens shouldBe Map(extraAsset -> 1L)
+  }
 }

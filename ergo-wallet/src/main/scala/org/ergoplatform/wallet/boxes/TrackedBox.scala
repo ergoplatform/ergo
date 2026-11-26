@@ -8,6 +8,9 @@ import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoBoxAssets, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
+import sigma.Extensions.CollBytesOps
+
+import scala.collection.mutable
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as
@@ -67,7 +70,14 @@ case class TrackedBox(creationTxId: ModifierId,
 
   def isSpent: Boolean = spendingHeightOpt.isDefined
 
-  lazy val tokens: TokensMap = box.tokens
+  lazy val tokens: TokensMap = {
+    val merged = mutable.LinkedHashMap.empty[ModifierId, Long]
+    box.additionalTokens.toArray.foreach { case (id, amt) =>
+      val mId = id.toModifierId
+      merged.update(mId, java.lang.Math.addExact(merged.getOrElse(mId, 0L), amt))
+    }
+    merged.toMap
+  }
 
   override def equals(obj: Any): Boolean = obj match {
     case tb: TrackedBox => tb.creationTxId == creationTxId && tb.creationOutIndex == creationOutIndex && box == tb.box

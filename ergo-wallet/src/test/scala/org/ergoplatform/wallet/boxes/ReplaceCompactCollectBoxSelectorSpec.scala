@@ -146,5 +146,17 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
     )
     val overflowTb = TrackedBox(parentTx, 0, Some(1), overflowBox, Set(PaymentsScanId))
     an[ArithmeticException] should be thrownBy overflowTb.tokens
+
+    val rawTokenId2 = Blake2b256("second-token-id")
+    val tokenId2 = bytesToId(rawTokenId2)
+    val tok2 = Digest32Coll @@ Colls.fromArray(rawTokenId2)
+    val orderedBox = testBox(
+      2 * MinBoxValue,
+      ErgoTree.fromProposition(TrueLeaf.toSigmaProp),
+      0,
+      Seq(tok -> 4L, tok2 -> 9L, tok -> 6L)
+    )
+    val orderedTb = TrackedBox(parentTx, 0, Some(1), orderedBox, Set(PaymentsScanId))
+    orderedTb.tokens.toSeq shouldBe Seq(tokenId -> 10L, tokenId2 -> 9L)
   }
 }

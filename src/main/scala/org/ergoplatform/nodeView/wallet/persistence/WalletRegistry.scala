@@ -398,7 +398,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
       val digest = fetchDigest()
 
       val walletAssets = mutable.LinkedHashMap(digest.walletAssetBalances :_*)
-      val boxAssets = box.tokens
+      val boxAssets = newBox.tokens
 
       val updDigest = if (!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)) {
         AssetUtils.mergeAssetsMut(walletAssets, boxAssets) //mutating digest!

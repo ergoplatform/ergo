@@ -288,7 +288,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
     val baseJson = io.circe.parser.parse(scala.io.Source.fromInputStream(stream).getLines().mkString("\n")).right.get
     val v6Json = baseJson.deepMerge(Json.obj(
-      "script" -> "{ Global.encodeNbits(1.toBigInt) >= 0L }".asJson,
+      "script" -> "{ Global.serialize(2).size > 0 }".asJson,
       "treeVersion" -> 3.asJson,
       "context" -> Json.obj("scriptVersion" -> 3.asJson)
     ))

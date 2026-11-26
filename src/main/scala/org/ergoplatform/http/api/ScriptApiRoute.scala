@@ -66,6 +66,8 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     }
   }
 
+  private def badRequest(e: Throwable): Route = BadRequest(Option(e.getMessage).getOrElse(e.toString))
+
   private def withWalletAndStateOp[T](op: (Readers) => T)(toRoute: T => Route): Route = {
     onSuccess((readersHolder ? GetReaders).mapTo[Readers].map(r => op(r)))(toRoute)
   }
@@ -78,7 +80,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         val treeVersion = compileRequest.treeVersion
         VersionContext.withVersions(scriptVersion, treeVersion) {
           compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey)), treeVersion).map(Pay2SAddress.apply).fold(
-            e => BadRequest(e.getMessage),
+            badRequest,
             address => ApiResponse(addressResponse(address))
           )
         }
@@ -94,7 +96,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         val treeVersion = compileRequest.treeVersion
         VersionContext.withVersions(scriptVersion, treeVersion) {
           compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey)), treeVersion).map(Pay2SHAddress.apply).fold(
-            e => BadRequest(e.getMessage),
+            badRequest,
             address => ApiResponse(addressResponse(address))
           )
         }
@@ -115,7 +117,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
           }
         }
       }.flatten.fold(
-        e => BadRequest(e.getMessage),
+        badRequest,
         s => ApiResponse(CryptoResult(s.value, s.cost).asJson)
       )
     }
@@ -125,7 +127,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       .map(address => address.script.bytes)
       .map(Base16.encode)
       .fold(
-        e => BadRequest(e.getMessage),
+        badRequest,
         tree => ApiResponse(Map("tree" -> tree).asJson)
       )
   }
@@ -137,7 +139,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
       .map(ValueSerializer.serialize)
       .map(Base16.encode)
       .fold(
-        e => BadRequest(e.getMessage),
+        badRequest,
         bs => ApiResponse(Map("bytes" -> bs).asJson)
       )
   }

@@ -147,10 +147,11 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
       w.putUInt(MaxTransactionsInBlock.toLong + bt.blockVersion)
     }
     w.putUInt(bt.txs.size.toLong)
+    lazy val version = Header.scriptAndTreeFromBlockVersions(blockVersion)
     bt.txs.foreach { tx =>
-      if (blockVersion >= VersionContext.V6SoftForkVersion) {
+      if (blockVersion >= Header.Interpreter60Version) {
         // since 6.0 we use versioned serializers
-        VersionContext.withVersions(blockVersion, blockVersion) {
+        VersionContext.withVersions(version.activatedVersion, version.ergoTreeVersion) {
           ErgoTransactionSerializer.serialize(tx, w)
         }
       } else {

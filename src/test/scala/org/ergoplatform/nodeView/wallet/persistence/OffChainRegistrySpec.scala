@@ -6,11 +6,16 @@ import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, Scan,
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.WalletTestOps
 import org.ergoplatform.wallet.Constants
+import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.crypto.hash.Blake2b256
+import scorex.util.bytesToId
+import sigma.Colls
 import sigma.ast.ByteArrayConstant
+import sigma.data.Digest32Coll
 
 import scala.collection.immutable.TreeSet
 import scala.util.Random
@@ -89,5 +94,25 @@ class OffChainRegistrySpec
     }
   }
 
+  it should "sum duplicate token IDs in Balance and OffChainRegistry digest" in {
+    val rawTokenId = Blake2b256("dup-offchain-token")
+    val tokenId = bytesToId(rawTokenId)
+    val tok = Digest32Coll @@ Colls.fromArray(rawTokenId)
+    val txId = bytesToId(Blake2b256("dup-offchain-tx"))
+    val dupBox = new ErgoBox(
+      1000000L,
+      TrueTree,
+      Colls.fromItems(tok -> 4L, tok -> 6L),
+      Map.empty,
+      txId,
+      0: Short,
+      1
+    )
+    val tb = TrackedBox(dupBox, 1, Set(Constants.PaymentsScanId))
+    Balance(tb).assets shouldBe Map(tokenId -> 10L)
+
+    val registry = OffChainRegistry.empty.updateOnTransaction(Seq(tb), Seq.empty, Seq.empty)
+    registry.digest.walletAssetBalances.toMap shouldBe Map(tokenId -> 10L)
+  }
 
 }

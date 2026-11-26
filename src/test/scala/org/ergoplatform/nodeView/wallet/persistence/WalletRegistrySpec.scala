@@ -5,12 +5,18 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
 import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.core.VersionTag
+import org.ergoplatform.settings.Constants.TrueTree
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.crypto.hash.Blake2b256
+import scorex.util.bytesToId
 import scorex.util.encode.Base16
+import sigma.Colls
+import sigma.data.Digest32Coll
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.Success
@@ -362,6 +368,32 @@ class WalletRegistrySpec
 
       val key4 = (prefix +: Shorts.toByteArray(scanId)) ++ Ints.toByteArray(height) ++ id
       WalletRegistry.composeKeyWithHeightAndId(prefix, ScanId @@ scanId, height, id) shouldBe key4
+    }
+  }
+
+  it should "sum duplicate token IDs in updateScans digest" in {
+    val appId: ScanId = ScanId @@ 21.toShort
+    val rawTokenId = Blake2b256("dup-registry-token")
+    val tokenId = bytesToId(rawTokenId)
+    val tok = Digest32Coll @@ Colls.fromArray(rawTokenId)
+    val txId = bytesToId(Blake2b256("dup-registry-tx"))
+    val dupBox = new ErgoBox(
+      1000000L,
+      TrueTree,
+      Colls.fromItems(tok -> 4L, tok -> 6L),
+      Map.empty,
+      txId,
+      0: Short,
+      1
+    )
+
+    withVersionedStore(10) { store =>
+      val reg = new WalletRegistry(store)(ws)
+      reg.updateScans(Set(PaymentsScanId), dupBox).get
+      reg.fetchDigest().walletAssetBalances.toMap shouldBe Map(tokenId -> 10L)
+
+      reg.updateScans(Set(appId), dupBox).get
+      reg.fetchDigest().walletAssetBalances.toMap shouldBe Map.empty
     }
   }
 

@@ -8,7 +8,6 @@ import org.ergoplatform.wallet.serialization.ErgoWalletSerializer
 import org.ergoplatform.{ErgoBox, ErgoBoxAssets, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-import sigma.Extensions.CollBytesOps
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as
@@ -68,9 +67,7 @@ case class TrackedBox(creationTxId: ModifierId,
 
   def isSpent: Boolean = spendingHeightOpt.isDefined
 
-  lazy val tokens: TokensMap = box.additionalTokens.toArray.map {
-    case (id, amt) => id.toModifierId -> amt
-  }.toMap
+  lazy val tokens: TokensMap = box.tokens
 
   override def equals(obj: Any): Boolean = obj match {
     case tb: TrackedBox => tb.creationTxId == creationTxId && tb.creationOutIndex == creationOutIndex && box == tb.box

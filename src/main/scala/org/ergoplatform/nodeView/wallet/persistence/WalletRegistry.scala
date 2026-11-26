@@ -12,7 +12,6 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, WalletSettings}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
-import org.ergoplatform.wallet.transactions.TransactionBuilder
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.db.LDBVersionedStore
@@ -399,7 +398,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
       val digest = fetchDigest()
 
       val walletAssets = mutable.LinkedHashMap(digest.walletAssetBalances :_*)
-      val boxAssets = TransactionBuilder.collTokensToMap(box.additionalTokens)
+      val boxAssets = newBox.tokens
 
       val updDigest = if (!oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId)) {
         AssetUtils.mergeAssetsMut(walletAssets, boxAssets) //mutating digest!

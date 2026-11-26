@@ -2,13 +2,17 @@ package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.ErgoLikeTransaction
-import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
+import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionResult, MinBoxValue}
+import scorex.crypto.hash.Blake2b256
+import scorex.util.bytesToId
 import sigmastate.helpers.TestingHelpers._
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+import sigma.Colls
 import sigma.ast.{ErgoTree, TrueLeaf}
 import sigma.ast.syntax.SigmaPropValue
+import sigma.data.Digest32Coll
 
 class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
 
@@ -114,5 +118,45 @@ class ReplaceCompactCollectBoxSelectorSpec extends AnyPropSpec with Matchers wit
       res.inputBoxes.length shouldBe res.inputBoxes.distinct.length
       res.inputBoxes.length shouldBe optimalInputs
     }
+  }
+
+  property("sums duplicate token IDs in TrackedBox.tokens during selection") {
+    val selector = new ReplaceCompactCollectBoxSelector(20, 5, None)
+    val rawTokenId = Blake2b256("dup-token-id")
+    val tokenId = bytesToId(rawTokenId)
+    val tok = Digest32Coll @@ Colls.fromArray(rawTokenId)
+    val dupBox = testBox(
+      2 * MinBoxValue,
+      ErgoTree.fromProposition(TrueLeaf.toSigmaProp),
+      0,
+      Seq(tok -> 4L, tok -> 6L)
+    )
+    val tb = TrackedBox(parentTx, 0, Some(1), dupBox, Set(PaymentsScanId))
+    tb.tokens shouldBe Map(tokenId -> 10L)
+
+    val res = selector.select(Iterator(tb), noFilter, MinBoxValue, Map(tokenId -> 3L)).right.value
+    res.changeBoxes.size shouldBe 1
+    res.changeBoxes.head.tokens shouldBe Map(tokenId -> 7L)
+
+    val overflowBox = testBox(
+      2 * MinBoxValue,
+      ErgoTree.fromProposition(TrueLeaf.toSigmaProp),
+      0,
+      Seq(tok -> Long.MaxValue, tok -> 1L)
+    )
+    val overflowTb = TrackedBox(parentTx, 0, Some(1), overflowBox, Set(PaymentsScanId))
+    an[ArithmeticException] should be thrownBy overflowTb.tokens
+
+    val rawTokenId2 = Blake2b256("second-token-id")
+    val tokenId2 = bytesToId(rawTokenId2)
+    val tok2 = Digest32Coll @@ Colls.fromArray(rawTokenId2)
+    val orderedBox = testBox(
+      2 * MinBoxValue,
+      ErgoTree.fromProposition(TrueLeaf.toSigmaProp),
+      0,
+      Seq(tok -> 4L, tok2 -> 9L, tok -> 6L)
+    )
+    val orderedTb = TrackedBox(parentTx, 0, Some(1), orderedBox, Set(PaymentsScanId))
+    orderedTb.tokens.toSeq shouldBe Seq(tokenId -> 10L, tokenId2 -> 9L)
   }
 }

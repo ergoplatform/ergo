@@ -45,8 +45,18 @@ trait ErgoWalletSupport extends ScorexLogging {
   protected def addSecretToStorage(state: ErgoWalletState, secret: ExtendedSecretKey): Try[ErgoWalletState] =
     state.walletVars.withExtendedKey(secret).flatMap { newWalletVars =>
       state.storage.addPublicKey(secret.publicKey).flatMap { _ =>
-        newWalletVars.stateCacheOpt.get.withNewPubkey(secret.publicKey).map { updCache =>
-          state.copy(walletVars = newWalletVars.copy(stateCacheProvided = Some(updCache))(newWalletVars.settings))
+        state.walletVars.stateCacheProvided match {
+          case Some(prevCache) =>
+            prevCache.withNewPubkey(secret.publicKey).map { updCache =>
+              state.copy(walletVars = newWalletVars.copy(stateCacheProvided = Some(updCache))(newWalletVars.settings))
+            }
+          case None =>
+            newWalletVars.stateCacheOpt match {
+              case Some(cache) =>
+                Success(state.copy(walletVars = newWalletVars.copy(stateCacheProvided = Some(cache))(newWalletVars.settings)))
+              case None =>
+                Failure(new IllegalStateException("Wallet prover is not initialized"))
+            }
         }
       }
     }

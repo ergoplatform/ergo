@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform.P2PKAddress
-import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
+import org.ergoplatform.{ErgoTreePredef, P2PKAddress}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 
@@ -49,6 +49,21 @@ class WalletVarsSpec extends ErgoCorePropertyTest {
       .ownsAddress(otherAddress) shouldBe true
     WalletVars(Some(primitiveProver), Seq.empty, Some(bothCache))
       .ownsAddress(otherAddress) shouldBe true
+  }
+
+  property("WalletCache.withNewPubkey adds mining script to scriptsFilter and preserves EIP-3 master hiding") {
+    val miningSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(mining = true))
+    val eip3Child = defaultRootSecret.derive(DerivationPath.fromEncoded("m/44'/429'/0'/0/0").get)
+    val baseCache = WalletCache(Seq(defaultRootSecret.publicKey), miningSettings)
+    val updCache = baseCache.withNewPubkey(eip3Child.publicKey).get
+
+    val rewardScriptBytes = ErgoTreePredef.rewardOutputScript(
+      miningSettings.miningRewardDelay,
+      eip3Child.publicKey.key
+    ).bytes
+    updCache.scriptsFilter.mightContain(rewardScriptBytes) shouldBe true
+    updCache.publicKeyAddresses shouldBe
+      WalletCache(Seq(defaultRootSecret.publicKey, eip3Child.publicKey), miningSettings).publicKeyAddresses
   }
 
 }

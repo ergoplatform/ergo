@@ -664,4 +664,32 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("key derivation after unlockWallet does not duplicate derived key in WalletCache") {
+    withInitializationFixture { fixture =>
+      val wpass = SecretString.create("y")
+      val prover = ErgoProvingInterpreter(defaultRootSecret, parameters)
+      val walletState = fixture.state.copy(
+        walletVars = WalletVars(Some(prover), Seq.empty, None)(fixture.settings), maxInputsToUse = 1000)
+      val walletService = fixture.service
+      val ws = fixture.retain(walletService.initWallet(
+        walletState,
+        fixture.settings,
+        walletPass = wpass,
+        None
+      ).get._2)
+
+      val locked = walletService.lockWallet(ws)
+      val unlocked = fixture.retain(walletService.unlockWallet(locked, wpass, usePreEip3Derivation = false).get)
+      unlocked.walletVars.stateCacheProvided shouldBe None
+      val baseTracked = unlocked.walletVars.trackedPubKeys.size
+      val baseAddrs = unlocked.walletVars.publicKeyAddresses.size
+
+      val derived = fixture.retain(walletService.deriveNextKey(unlocked, usePreEip3Derivation = false).get._2)
+      derived.walletVars.trackedPubKeys.size shouldBe (baseTracked + 1)
+      derived.walletVars.trackedPubKeys.distinct.size shouldBe derived.walletVars.trackedPubKeys.size
+      derived.walletVars.publicKeyAddresses.size shouldBe (baseAddrs + 1)
+      derived.walletVars.publicKeyAddresses.distinct.size shouldBe derived.walletVars.publicKeyAddresses.size
+    }
+  }
+
 }

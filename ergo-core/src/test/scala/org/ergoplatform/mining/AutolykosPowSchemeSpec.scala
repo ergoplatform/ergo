@@ -136,4 +136,24 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
     pow.validate(header).isSuccess shouldBe false
   }
 
+  property("checkNonces v2 matches hitForVersion2ForMessage when element sum fits in fewer than 32 bytes") {
+    // With k = 1, each element is a 31-byte unsigned integer, so f2 < 2^247 (~50% of nonces)
+    // has a 31-byte signed two's-complement representation while hitForVersion2ForMessage
+    // always hashes a 32-byte unsigned big-endian encoding.
+    val pow = new AutolykosPowScheme(1, 10)
+    val msg = Blake2b256("autolykos-v2-checknonces-32b-regression")
+    val hbs = Ints.toByteArray(1000)
+    val N = pow.calcN(2: Byte, 1000)
+    val sk = BigInt(1)
+    val x = BigInt(2)
+    val maxTarget = q
+
+    (0L until 32L).foreach { nonceLong =>
+      val solOpt = pow.checkNonces(2: Byte, hbs, msg, sk, x, maxTarget, N, nonceLong, nonceLong + 1)
+      solOpt shouldBe defined
+      val sol = solOpt.get
+      sol.d shouldBe pow.hitForVersion2ForMessage(msg, sol.n, hbs, N)
+    }
+  }
+
 }

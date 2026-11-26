@@ -394,7 +394,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
         (x * genIndexes(seed, N).map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum - sk).mod(q)
       } else {
         val indexes = genIndexes(seed, N)
-        toBigInt(hash(indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum.toByteArray))
+        val f2 = indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum
+        toBigInt(hash(BigIntegers.asUnsignedByteArray(32, f2.underlying())))
       }
       if (d <= b) {
         log.debug(s"Solution found at $i")

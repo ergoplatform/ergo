@@ -11,7 +11,8 @@ import org.ergoplatform.network.message.{
   MessageSpec,
   UtxoSnapshotChunkSpec
 }
-import org.ergoplatform.network.{Handshake, HandshakeSerializer}
+import org.ergoplatform.network.peer.PenaltyType
+import org.ergoplatform.network.{Handshake, HandshakeSerializer, Version}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants.{defaultPeerSpec, settings}
 import scorex.core.app.ScorexContext
@@ -335,6 +336,37 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
 
       fixture.connection.expectMsg(Tcp.Abort)
       fixture.watcher.expectNoMessage(200.millis)
+    }
+  }
+
+  property("ban and close peer sending pre-EIP-37 handshake before selfPeer is initialized") {
+    withHandler(Seq.empty, localPort = 9243) { fixture =>
+      val remoteAddress = new InetSocketAddress("127.0.0.1", 9244)
+      val oldHandshake = HandshakeSerializer.toBytes(
+        Handshake(defaultPeerSpec.copy(protocolVersion = Version(4, 0, 99)), System.currentTimeMillis())
+      )
+      fixture.connection.send(fixture.handler, Tcp.Received(ByteString(oldHandshake)))
+
+      fixture.watcher.expectMsg(
+        2.seconds,
+        NetworkController.ReceivableMessages.PenalizePeer(remoteAddress, PenaltyType.PermanentPenalty)
+      )
+      fixture.connection.expectMsg(2.seconds, Tcp.Abort)
+    }
+  }
+
+  property("ban and close peer sending malformed handshake before selfPeer is initialized") {
+    withHandler(Seq.empty, localPort = 9253) { fixture =>
+      val remoteAddress = new InetSocketAddress("127.0.0.1", 9254)
+      // time = 0 (VLQ 0x00), appName = "" (length 0x00) -> violates require(appName.nonEmpty) in PeerSpecSerializer
+      val malformedHandshake = ByteString(0: Byte, 0: Byte)
+      fixture.connection.send(fixture.handler, Tcp.Received(malformedHandshake))
+
+      fixture.watcher.expectMsg(
+        2.seconds,
+        NetworkController.ReceivableMessages.PenalizePeer(remoteAddress, PenaltyType.PermanentPenalty)
+      )
+      fixture.connection.expectMsg(2.seconds, Tcp.Abort)
     }
   }
 }

@@ -97,9 +97,11 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   }
 
   //ban this peer for the wrong handshake message
-  //peer will be added to the blacklist and the network controller will send CloseConnection
+  //peer will be added to the blacklist and the connection closed immediately
   private def banPeer(): Unit = {
-    selfPeer.foreach(c => networkControllerRef ! PenalizePeer(c.connectionId.remoteAddress, PenaltyType.PermanentPenalty))
+    networkControllerRef ! PenalizePeer(connectionId.remoteAddress, PenaltyType.PermanentPenalty)
+    context become closing
+    self ! CloseConnection
   }
 
   private def receiveAndHandleHandshake(handler: Handshake => Unit): Receive = {

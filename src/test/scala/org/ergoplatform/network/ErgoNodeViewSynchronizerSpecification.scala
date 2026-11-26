@@ -2605,4 +2605,161 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       invTxAndExpectRequest(announcerB, tx)
     }
   }
+
+  property("NodeViewSynchronizer: initial ChangedState during initializing updates activatedScriptVersion") {
+    val fixture = new AkkaFixture
+    try {
+      import fixture.system
+      implicit val ec: ExecutionContextExecutor = system.dispatcher
+      val ncProbe = TestProbe("NetworkControllerProbe")
+      val vhProbe = TestProbe("ViewHolderProbe")
+      val pchProbe = TestProbe("PeerHandlerProbe")
+      val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+      val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+
+      val emptyHistory = generateHistory(
+        verifyTransactions = true,
+        StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = -1
+      )
+      val syncedHistory = applyChain(emptyHistory, genChain(3, emptyHistory))
+
+      val synchronizerTestRef: TestActorRef[ErgoNodeViewSynchronizer] = TestActorRef(Props(
+        new SynchronizerMock(
+          ncProbe.ref,
+          vhProbe.ref,
+          ErgoSyncInfoMessageSpec,
+          settings,
+          syncTracker,
+          deliveryTracker
+        )(ec)
+      ))
+      val synchronizerRef: ActorRef = synchronizerTestRef
+
+      val baseCtx = org.ergoplatform.nodeView.state.ErgoStateContext.empty(
+        settings.chainSettings,
+        settings.launchParameters
+      )
+      val v6Ctx = new org.ergoplatform.nodeView.state.ErgoStateContext(
+        baseCtx.lastHeaders,
+        baseCtx.lastExtensionOpt,
+        baseCtx.genesisStateDigest,
+        baseCtx.currentParameters,
+        baseCtx.validationSettings,
+        baseCtx.votingData
+      )(settings.chainSettings) {
+        override def blockVersion: Header.Version = Header.Interpreter60Version
+      }
+      val v6StateReader = new org.ergoplatform.nodeView.state.ErgoStateReader {
+        override def rootDigest: scorex.crypto.authds.ADDigest = baseCtx.genesisStateDigest
+        override def version: org.ergoplatform.core.VersionTag =
+          org.ergoplatform.core.bytesToVersion(Array.fill[Byte](32)(0: Byte))
+        override val store: scorex.db.LDBVersionedStore = null
+        override protected def ergoSettings: ErgoSettings = settings
+        override def stateContext: org.ergoplatform.nodeView.state.ErgoStateContext = v6Ctx
+      }
+
+      // Mirror ErgoNodeViewHolder.getNodeViewChanges startup order:
+      // ChangedHistory -> ChangedState (while still in initializing) -> ChangedMempool
+      synchronizerRef ! ChangedHistory(syncedHistory)
+      synchronizerRef ! ChangedState(v6StateReader)
+      synchronizerRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val expectedScriptVersion = Header.scriptFromBlockVersion(Header.Interpreter60Version)
+      eventually {
+        synchronizerTestRef.underlyingActor.activatedScriptVersion shouldBe expectedScriptVersion
+      }
+
+      val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
+      val inputs = IndexedSeq(Input(ADKey @@ scorex.utils.Random.randomBytes(32), proof))
+      val peer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+      )
+
+      // With activatedScriptVersion == 3 (v6.0), a remote P2P tx with treeVersion == 4
+      // must fail VersionContext(3, 4) -> SerializerException and penalize the peer
+      // instead of bypassing the upper bound under stale VersionContext(0, 4).
+      val futureTreeVersion: Byte = (expectedScriptVersion + 1).toByte
+      val v4Tree = sigma.ast.ErgoTree(
+        sigma.ast.ErgoTree.defaultHeaderWithVersion(futureTreeVersion),
+        sigma.ast.ErgoTree.EmptyConstants,
+        sigma.ast.syntax.TrueSigmaProp
+      )
+      val v4Out = new org.ergoplatform.ErgoBoxCandidate(
+        value = 1000000L,
+        ergoTree = v4Tree,
+        creationHeight = 1,
+        additionalTokens = Colls.emptyColl,
+        additionalRegisters = Map.empty
+      )
+      val v4Tx = ErgoTransaction(inputs, IndexedSeq(v4Out))
+      val v4TxBytes = v4Tx.bytes
+
+      synchronizerRef ! Message(
+        InvSpec,
+        Left(InvSpec.toBytes(InvData(ErgoTransaction.modifierTypeId, Seq(v4Tx.id)))),
+        Some(peer)
+      )
+      ncProbe.fishForMessage(5.seconds) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+          val req = stn.message.data.get.asInstanceOf[InvData]
+          req.typeId == ErgoTransaction.modifierTypeId && req.ids.contains(v4Tx.id)
+        case _ => false
+      }
+      synchronizerRef ! Message(
+        ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(ErgoTransaction.modifierTypeId, Map(v4Tx.id -> v4TxBytes)))),
+        Some(peer)
+      )
+      ncProbe.fishForMessage(5.seconds) {
+        case PenalizePeer(addr, PenaltyType.MisbehaviorPenalty) if addr == peer.connectionId.remoteAddress => true
+        case _ => false
+      }
+
+      // A valid remote P2P tx with treeVersion == 3 must still parse and be forwarded first.
+      val v3Tree = sigma.ast.ErgoTree(
+        sigma.ast.ErgoTree.defaultHeaderWithVersion(expectedScriptVersion),
+        sigma.ast.ErgoTree.EmptyConstants,
+        sigma.ast.syntax.TrueSigmaProp
+      )
+      val v3Out = new org.ergoplatform.ErgoBoxCandidate(
+        value = 1000000L,
+        ergoTree = v3Tree,
+        creationHeight = 1,
+        additionalTokens = Colls.emptyColl,
+        additionalRegisters = Map.empty
+      )
+      val v3Tx = ErgoTransaction(inputs, IndexedSeq(v3Out))
+      val v3TxBytes = v3Tx.bytes
+
+      synchronizerRef ! Message(
+        InvSpec,
+        Left(InvSpec.toBytes(InvData(ErgoTransaction.modifierTypeId, Seq(v3Tx.id)))),
+        Some(peer)
+      )
+      ncProbe.fishForMessage(5.seconds) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+          val req = stn.message.data.get.asInstanceOf[InvData]
+          req.typeId == ErgoTransaction.modifierTypeId && req.ids.contains(v3Tx.id)
+        case _ => false
+      }
+      synchronizerRef ! Message(
+        ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(ErgoTransaction.modifierTypeId, Map(v3Tx.id -> v3TxBytes)))),
+        Some(peer)
+      )
+      val forwarded = vhProbe.fishForMessage(5.seconds) {
+        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
+        case _ => false
+      }.asInstanceOf[ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote]
+
+      forwarded.unconfirmedTx.id shouldBe v3Tx.id
+      forwarded.unconfirmedTx.transaction.outputs.head.ergoTree.isRightParsed shouldBe true
+    } finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
 }

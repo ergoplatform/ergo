@@ -203,7 +203,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
   // current script version (block version minus 1)
-  private var activatedScriptVersion = Header.scriptFromBlockVersion(Header.InitialVersion)
+  private[network] var activatedScriptVersion = Header.scriptFromBlockVersion(Header.InitialVersion)
 
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
@@ -1862,6 +1862,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           context.become(initializing(hr, Option(mempoolReader), usr, blockAppliedTxsCache))
       }
     case ChangedState(reader: ErgoStateReader) =>
+      activatedScriptVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
       reader match {
         case utxoStateReader: UtxoStateReader =>
           context.become(initializing(hr, mp, Some(utxoStateReader), blockAppliedTxsCache))

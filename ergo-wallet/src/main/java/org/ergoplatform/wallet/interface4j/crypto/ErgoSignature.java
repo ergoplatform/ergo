@@ -26,7 +26,7 @@ public class ErgoSignature {
      * @return `true` is the signature is valid, `false` otherwise
      */
     public boolean verify(byte[] msg, byte[] signature, SecP256K1Point pk) {
-        return org.ergoplatform.wallet.crypto.ErgoSignature.verify(msg, signature, new Platform.Ecp(pk));
+        return pk != null && org.ergoplatform.wallet.crypto.ErgoSignature.verify(msg, signature, new Platform.Ecp(pk));
     }
 
 }

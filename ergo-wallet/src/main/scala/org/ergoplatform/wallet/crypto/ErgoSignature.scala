@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.crypto
 import org.bouncycastle.util.BigIntegers
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigma.crypto.EcPointType
+import sigma.crypto.{CryptoFacade, EcPointType}
 import sigma.serialization.GroupElementSerializer
 
 import scala.annotation.tailrec
@@ -36,14 +36,22 @@ object ErgoSignature {
     * @return `true` is the signature is valid, `false` otherwise
     */
   def verify(msg: Array[Byte], signature: Array[Byte], pk: EcPointType): Boolean = {
-    val cBytes = signature.take(24)
-    val c = BigInt(BigIntegers.fromUnsignedByteArray(cBytes))
-    val z = BigInt(BigIntegers.fromUnsignedByteArray(signature.takeRight(32)))
-    val a1 = dlogGroup.exponentiate(dlogGroup.generator, z.bigInteger)
-    val a2 = dlogGroup.exponentiate(pk, c.bigInteger.negate())
-    val w = dlogGroup.multiplyGroupElements(a1, a2)
-    val s = genCommitment(pk, w) ++ msg
-    java.util.Arrays.equals(hf(s), cBytes)
+    if (msg == null || signature == null || pk == null || signature.length != 56 || CryptoFacade.isInfinityPoint(pk)) {
+      false
+    } else {
+      val cBytes = signature.take(24)
+      val z = BigInt(BigIntegers.fromUnsignedByteArray(signature.takeRight(32)))
+      if (z >= groupOrder) {
+        false
+      } else {
+        val c = BigInt(BigIntegers.fromUnsignedByteArray(cBytes))
+        val a1 = dlogGroup.exponentiate(dlogGroup.generator, z.bigInteger)
+        val a2 = dlogGroup.exponentiate(pk, c.bigInteger.negate())
+        val w = dlogGroup.multiplyGroupElements(a1, a2)
+        val s = genCommitment(pk, w) ++ msg
+        java.util.Arrays.equals(hf(s), cBytes)
+      }
+    }
   }
 
   @tailrec

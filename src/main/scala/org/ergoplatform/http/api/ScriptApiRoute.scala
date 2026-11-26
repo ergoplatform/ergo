@@ -105,16 +105,18 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   private def executeWithContextR: Route =
     (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
-      compileSource(req.script, req.env, req.treeVersion.getOrElse(0)).fold(
-        e => BadRequest(e.getMessage),
-        tree => {
-          val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
-          val res = Try(interpreter.fullReduction(tree, req.ctx.asInstanceOf[interpreter.CTX], Interpreter.emptyEnv))
-          res.fold(
-            e => BadRequest(e.getMessage),
-            s => ApiResponse(CryptoResult(s.value, s.cost).asJson)
-          )
+      val treeVersion = req.treeVersion.getOrElse(0.toByte)
+      val scriptVersion = req.ctx.activatedScriptVersion
+      Try {
+        VersionContext.withVersions(scriptVersion, treeVersion) {
+          compileSource(req.script, req.env, treeVersion).flatMap { tree =>
+            val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
+            Try(interpreter.fullReduction(tree, req.ctx.asInstanceOf[interpreter.CTX], Interpreter.emptyEnv))
+          }
         }
+      }.flatten.fold(
+        e => BadRequest(e.getMessage),
+        s => ApiResponse(CryptoResult(s.value, s.cost).asJson)
       )
     }
 

@@ -283,4 +283,29 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "execute v6.0 script with VersionContext when treeVersion is 3" in {
+    val suffix = "/executeWithContext"
+    val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
+    val baseJson = io.circe.parser.parse(scala.io.Source.fromInputStream(stream).getLines().mkString("\n")).right.get
+    val v6Json = baseJson.deepMerge(Json.obj(
+      "script" -> "{ Global.encodeNbits(1.toBigInt) >= 0L }".asJson,
+      "treeVersion" -> 3.asJson,
+      "context" -> Json.obj("scriptVersion" -> 3.asJson)
+    ))
+    Post(prefix + suffix, v6Json) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
+      json.hcursor.downField("value").downField("condition").as[Boolean].right.get shouldEqual true
+    }
+
+    val invalidVersionJson = baseJson.deepMerge(Json.obj(
+      "script" -> "{ true }".asJson,
+      "treeVersion" -> 3.asJson,
+      "context" -> Json.obj("scriptVersion" -> 2.asJson)
+    ))
+    Post(prefix + suffix, invalidVersionJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
 }

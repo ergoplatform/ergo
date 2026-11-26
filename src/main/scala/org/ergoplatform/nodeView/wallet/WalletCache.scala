@@ -31,13 +31,16 @@ final case class WalletCache(publicKeyAddresses: Seq[P2PKAddress],
   val miningScriptsBytes: Seq[Array[Byte]] = miningScripts.map(_.bytes)
 
   def withNewPubkey(newPk: ExtendedPublicKey): Try[WalletCache] = Try {
-    val updAddresses: Seq[P2PKAddress] = publicKeyAddresses :+ P2PKAddress(newPk.key)
     val updTrackedPubKeys: Seq[ExtendedPublicKey] = trackedPubKeys :+ newPk
+    val updAddresses: Seq[P2PKAddress] = WalletCache.publicKeyAddresses(updTrackedPubKeys, addressEncoder)
     val newPkBytes = newPk.key.propBytes.toArray
     val updTrackedBytes: Seq[Array[Byte]] = trackedBytes :+ newPkBytes
 
     // update filter
     scriptsFilter.put(newPkBytes)
+    if (settings.nodeSettings.mining) {
+      scriptsFilter.put(ErgoTreePredef.rewardOutputScript(settings.miningRewardDelay, newPk.key).bytes)
+    }
 
     WalletCache(updAddresses, updTrackedPubKeys, updTrackedBytes, scriptsFilter)
   }

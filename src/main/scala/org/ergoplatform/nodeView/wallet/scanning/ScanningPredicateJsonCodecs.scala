@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, Json}
+import io.circe.{Decoder, DecodingFailure, Encoder, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.http.api.ApiCodecs
@@ -48,6 +48,8 @@ object ScanningPredicateJsonCodecs extends ApiCodecs {
         for {
           args <- cursor.downField("args").as[Seq[ScanningPredicate]]
         } yield OrScanningPredicate(args: _*)
+      case other =>
+        Left(DecodingFailure(s"Unknown scanning predicate: $other", cursor.history))
     }
   }
 

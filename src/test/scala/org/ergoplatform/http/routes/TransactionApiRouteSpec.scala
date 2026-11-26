@@ -387,4 +387,35 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "return chained unconfirmed tx spending an unconfirmed output by input ergoTree" in {
+    val otherTree = sigma.ast.ErgoTree.fromSigmaBoolean(sigma.data.TrivialProp.FalseProp)
+    val chainedOut = new ErgoBoxCandidate(inputBox.value, otherTree, creationHeight = 0)
+    val spendingChainedTx = ErgoTransaction(IndexedSeq(Input(tx.outputs.head.id, emptyProverResult)), IndexedSeq(chainedOut))
+    val mp = ErgoMemPool.empty(settings)
+      .put(UnconfirmedTransaction(tx, None))
+      .put(UnconfirmedTransaction(spendingChainedTx, None))
+    class ChainedMempoolStub extends Actor {
+      def receive: PartialFunction[Any, Unit] = {
+        case GetReaders => sender() ! Readers(history, utxoState, mp, wallet)
+        case GetDataFromHistory(f) => sender() ! f(history)
+      }
+    }
+    val readers = system.actorOf(Props(new ChainedMempoolStub))
+    val chainedMempoolRoute = TransactionsApiRoute(readers, nodeViewRef, settings).route
+    val searchedTree = tx.outputs.head.ergoTree.bytesHex
+
+    Post(prefix + s"/unconfirmed/byErgoTree", searchedTree) ~> chainedMempoolRoute ~> check {
+      status shouldBe StatusCodes.OK
+      val ids = responseAs[List[Json]].flatMap(_.hcursor.downField("id").as[String].toOption).toSet
+      ids shouldBe Set(tx.id, spendingChainedTx.id)
+    }
+  }
+
+  it should "encode CTHRESHOLD threshold k in sigmaBooleanEncoder" in {
+    val threshold = sigma.data.CTHRESHOLD(2, Seq(sigma.data.TrivialProp.TrueProp, sigma.data.TrivialProp.FalseProp))
+    val json = sigmaBooleanEncoder(threshold)
+    json.hcursor.downField("k").as[Int] shouldEqual Right(2)
+    json.hcursor.downField("args").as[List[Json]].map(_.size) shouldEqual Right(2)
+  }
+
 }

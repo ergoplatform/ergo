@@ -102,6 +102,8 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
           },
         assetsMet
       )) {
+        // Re-check ERG balance in case Phase-2 token boxes added change assets requiring extra ERG for change boxes
+        pickBoxes(inputBoxes, externalFilter, balanceMet)
         formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
           selectionResultWithEip27Output(res.toSeq, changeBoxes)
         }

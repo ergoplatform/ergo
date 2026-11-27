@@ -6,6 +6,7 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
+import io.circe.syntax._
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{P2PKAddress, Pay2SAddress, Pay2SHAddress}
 import org.ergoplatform.http.api.ErgoUtilsApiRoute
@@ -60,6 +61,32 @@ class UtilsApiRouteSpec extends AnyFlatSpec
         val detail = responseAs[Json].hcursor.downField("detail").as[String]
         detail shouldBe Right("Seed length must be an integer between 0 and 1024 bytes")
       }
+    }
+  }
+
+  it should "reject oversized addresses before decoding" in {
+    val address = "1" * 6402
+    val requests = Seq(
+      Get(s"$prefix/address/$address"),
+      Get(s"$prefix/addressToRaw/$address"),
+      Post(s"$prefix/address", address.asJson)
+    )
+
+    requests.foreach { request =>
+      request ~> route ~> check {
+        status shouldBe StatusCodes.BadRequest
+        val detail = responseAs[Json].hcursor.downField("detail").as[String]
+        detail shouldBe Right("Address length must not exceed 6400 characters")
+      }
+    }
+  }
+
+  it should "reject oversized ErgoTree hex before decoding" in {
+    val ergoTreeHex = "0" * 8194
+    Post(s"$prefix/ergoTreeToAddress", ergoTreeHex.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val detail = responseAs[Json].hcursor.downField("detail").as[String]
+      detail shouldBe Right("ErgoTree hex length must not exceed 8192 characters")
     }
   }
 

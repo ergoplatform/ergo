@@ -46,6 +46,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   private val loadMaxKeys: Int = 100
+  private val MaxScriptSourceLength: Int = 32 * 1024
 
   private def addressResponse(address: ErgoAddress): Json = Json.obj("address" -> addressJsonEncoder(address))
 
@@ -54,15 +55,19 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   private def compileSource(source: String, env: Map[String, Any], treeVersion: Byte): Try[ErgoTree] = {
-    val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
-    val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(treeVersion)
-    Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
-      case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
-        Success(ErgoTree.fromProposition(ergoTreeHeader, script))
-      case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
-        Success(ErgoTree.fromProposition(ergoTreeHeader, script.toSigmaProp))
-      case other =>
-        Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
+    if (source.length > MaxScriptSourceLength) {
+      Failure(new IllegalArgumentException(s"Script source length must not exceed $MaxScriptSourceLength characters"))
+    } else {
+      val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
+      val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(treeVersion)
+      Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
+        case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
+          Success(ErgoTree.fromProposition(ergoTreeHeader, script))
+        case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
+          Success(ErgoTree.fromProposition(ergoTreeHeader, script.toSigmaProp))
+        case other =>
+          Failure(new Exception(s"Source compilation result is of type ${other.buildTree.tpe}, but `SBoolean` expected"))
+      }
     }
   }
 
@@ -109,7 +114,10 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         e => BadRequest(e.getMessage),
         tree => {
           val interpreter: ErgoLikeInterpreter = new ErgoLikeInterpreter()
-          val res = Try(interpreter.fullReduction(tree, req.ctx.asInstanceOf[interpreter.CTX], Interpreter.emptyEnv))
+          val ctx = req.ctx
+            .withCostLimit(ergoSettings.nodeSettings.maxTransactionCost)
+            .withInitCost(math.max(0L, req.ctx.initCost))
+          val res = Try(interpreter.fullReduction(tree, ctx.asInstanceOf[interpreter.CTX], Interpreter.emptyEnv))
           res.fold(
             e => BadRequest(e.getMessage),
             s => ApiResponse(CryptoResult(s.value, s.cost).asJson)

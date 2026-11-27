@@ -563,6 +563,7 @@ components:
     ErgoAddress:
       description: Encoded Ergo Address
       type: string
+      maxLength: 6400
       example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
 
     RewardAddress:
@@ -939,11 +940,11 @@ components:
         costLimit:
           type: integer
           format: int64
-          description: hard limit on accumulated execution cost, if exceeded lead to CostLimitException to be thrown
+          description: Requested execution cost limit. The node overrides it with its configured maximum transaction cost.
         initCost:
           type: integer
           format: int64
-          description: initial value of execution cost already accumulated before Interpreter.verify is called
+          description: initial value of execution cost already accumulated before Interpreter.verify is called; negative values are clamped to zero
 
 
     ExecuteScript:
@@ -957,6 +958,7 @@ components:
         script:
           description: Sigma script to be executed
           type: string
+          maxLength: 32768
         namedConstants:
           description: Environment for compiler
           type: object
@@ -979,6 +981,7 @@ components:
         source:
           description: Source code of the ErgoScript to be compiled
           type: string
+          maxLength: 32768
         treeVersion:
           description: Version of ErgoTree to compile to
           type: integer
@@ -4111,6 +4114,7 @@ paths:
             schema:
               description: Encoded Ergo Address
               type: string
+              maxLength: 6400
               example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
       responses:
         '200':
@@ -4195,6 +4199,7 @@ paths:
           description: ErgoTree to derive an address from
           schema:
             type: string
+            maxLength: 8192
             example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       responses:
         '200':
@@ -4223,6 +4228,7 @@ paths:
           application/json:
             schema:
               type: string
+              maxLength: 8192
               example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       responses:
         '200':

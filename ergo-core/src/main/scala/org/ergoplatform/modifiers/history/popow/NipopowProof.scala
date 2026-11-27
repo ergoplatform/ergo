@@ -44,7 +44,11 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
   def chainOfLevel(l: Int): Seq[PoPowHeader] = prefix.filter(x => popowAlgos.maxLevelOf(x.header) >= l)
 
   /**
-    * Implementation of the ≥ algorithm from [KMZ17], see Algorithm 4
+    * The ≥ comparison of [KMZ17], Algorithm 4, with the score of `NipopowAlgos.bestArg` in place of its count of
+    * superblocks: the headers after the last common header are scored on each side, and this proof is better if
+    * its score is greater. A side with fewer than m headers has no score: it is read as the most its headers
+    * could show, which is their score with m = 1, and it replaces no side which has a score. A side with no
+    * headers reads as zero, so a proof which holds the last header of that one and goes on from it is better.
     *
     * @param that - PoPoW proof to compare with
     * @return whether this PoPoW proof is better than "that"
@@ -55,7 +59,18 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
         popowAlgos.lowestCommonAncestor(headersChain, that.headersChain)
           .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
           .exists({ case (thisDivergingChain, thatDivergingChain) =>
-            popowAlgos.bestArg(thisDivergingChain)(m) > popowAlgos.bestArg(thatDivergingChain)(m)
+            // A score of zero is of a side with fewer than m headers: too few for their work to be weighed
+            // against a score, so such a side does not replace a side which has one. Against a side with no
+            // score, a side is read as its own score or, if it has none either, as the most its headers could
+            // show, which is their score with m = 1; a side with no headers reads as zero
+            val thisScore = popowAlgos.bestArg(thisDivergingChain)(m)
+            val thatScore = popowAlgos.bestArg(thatDivergingChain)(m)
+            if (thatScore > 0) {
+              thisScore > thatScore
+            } else {
+              val thisShown = if (thisScore > 0) thisScore else popowAlgos.bestArg(thisDivergingChain)(1)
+              thisShown > popowAlgos.bestArg(thatDivergingChain)(1)
+            }
           })
       } else {
         this.isValid

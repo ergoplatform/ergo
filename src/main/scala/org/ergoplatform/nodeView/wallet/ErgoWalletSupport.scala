@@ -99,25 +99,30 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
   }
 
-  // merge tokens from burn request with auto-burn mechanism
+  // merge tokens from burn request with auto-burn mechanism without double-counting overlaps
   private def mergeBurnWhitelistTokens(state: ErgoWalletState,
                                        inputBoxes: Array[TrackedBox],
                                        burnTokensRequestMap: TokensMap): TokensMap = {
+    def mergeMax(autoBurn: TokensMap, requested: TokensMap): TokensMap = {
+      requested.foldLeft(autoBurn) { case (acc, (id, reqAmt)) =>
+        acc.updated(id, math.max(acc.getOrElse(id, 0L), reqAmt))
+      }
+    }
+
     val input = inputBoxes.flatMap(_.tokens)
     state.walletVars.settings.walletSettings.tokensWhitelist match {
       case Some(x: Seq[String]) if x.isEmpty =>
-        AssetUtils.mergeAssets(
-          TransactionBuilder.collTokensToMap(
-            input.map { case (id, amt) => (IdUtils.decodedTokenId(id), amt) }.toColl
-          ),
-          burnTokensRequestMap)
-      case Some(x: Seq[String]) => AssetUtils.mergeAssets(
-        TransactionBuilder.collTokensToMap(
+        val autoBurnMap = TransactionBuilder.collTokensToMap(
+          input.map { case (id, amt) => (IdUtils.decodedTokenId(id), amt) }.toColl
+        )
+        mergeMax(autoBurnMap, burnTokensRequestMap)
+      case Some(x: Seq[String]) =>
+        val autoBurnMap = TransactionBuilder.collTokensToMap(
           input
             .filterNot(tMap => x.contains(tMap._1))
             .map { case (id, amt) => (IdUtils.decodedTokenId(id), amt) }.toColl
-        ),
-        burnTokensRequestMap)
+        )
+        mergeMax(autoBurnMap, burnTokensRequestMap)
       case None =>
         burnTokensRequestMap
     }

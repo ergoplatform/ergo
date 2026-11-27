@@ -363,6 +363,14 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       tx1.outputs.head.value shouldBe (confirmedBalance / 2)
       tx1.outputs.head.additionalTokens.toArray shouldBe Seq.empty
       toAssetMap(tx1.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(Seq.empty)
+
+      // Combining auto-burn (empty whitelist) with an explicit BurnTokensRequest for the same token
+      // must not double-count the token amount and fail box selection
+      val burnReq = BurnTokensRequest(assetToSpend.toArray)
+      val tx2 = await(wallet.generateTransaction(Seq(req1, burnReq), boxesToUseEncoded)).get
+      tx2.outputs.size shouldBe 2
+      tx2.outputs.head.value shouldBe (confirmedBalance / 2)
+      toAssetMap(tx2.outputs(1).additionalTokens.toArray) shouldBe toAssetMap(Seq.empty)
     }
   }
 

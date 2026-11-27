@@ -121,15 +121,19 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       new ErgoMemPool(mp.pool.remove(tx), mp.updateStatsOnRemoval(tx), sortingOption)
     }
 
-    val poolWithoutTx = removeTx(this, tx)
+    val poolWithoutTx = if (this.contains(tx.id)) removeTx(this, tx) else this
     val doubleSpentTransactionIds = tx.inputs.flatMap(i =>
       poolWithoutTx.pool.inputs.get(i.boxId)
     ).toSet
-    val doubleSpentTransactions = doubleSpentTransactionIds.flatMap { txId =>
-      poolWithoutTx.pool.orderedTransactions.get(txId)
-    }
-    doubleSpentTransactions.foldLeft(poolWithoutTx) { case (pool, tx) =>
-      removeTx(pool, tx.transaction)
+    if (doubleSpentTransactionIds.isEmpty) {
+      poolWithoutTx
+    } else {
+      val doubleSpentTransactions = doubleSpentTransactionIds.flatMap { txId =>
+        poolWithoutTx.pool.orderedTransactions.get(txId)
+      }
+      doubleSpentTransactions.foldLeft(poolWithoutTx) { case (pool, tx) =>
+        removeTx(pool, tx.transaction)
+      }
     }
   }
 
@@ -138,11 +142,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     */
   def removeWithDoubleSpends(txs: TraversableOnce[ErgoTransaction]): ErgoMemPool = {
     txs.foldLeft(this) { case (memPool, tx) =>
-      if (memPool.contains(tx.id)) { // tx could be removed earlier in this loop as double-spend of another tx
-        memPool.removeTxAndDoubleSpends(tx)
-      } else {
-        memPool
-      }
+      memPool.removeTxAndDoubleSpends(tx)
     }
   }
 

@@ -94,10 +94,11 @@ trait LRUCache extends ModifiersCache {
 
 
   override protected def onPut(key: K): Unit = {
-    evictionQueue.enqueue(key)
-    if (evictionQueue.size > maxSize + cleaningThreshold) {
+    // The key is not in cache until ModifiersCache.put returns from onPut.
+    if (evictionQueue.size >= maxSize + cleaningThreshold) {
       evictionQueue.dequeueAll(k => !cache.contains(k))
     }
+    evictionQueue.enqueue(key)
   }
 
   def cleanOverfull(): Seq[V] = {

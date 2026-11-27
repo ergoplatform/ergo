@@ -18,6 +18,11 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
   val keepVersions = 350
   val chainLength = 50
   val delta = 150
+  // sync v2 finds a common point only through the headers 0, 16, 128 and 512 blocks
+  // below a node's tip (`ErgoHistoryReader.FullV2SyncOffsets`), so nodeB's header 128
+  // blocks below its fork tip must be on the chain it shares with nodeA. That tip is at
+  // least `sharedChainLength + chainLength` = 130, and nodeB's fork is under 128 blocks.
+  val sharedChainLength = 80
 
   val localVolumeA = s"$localDataDir/node-rollback-spec/nodeA/data"
   val localVolumeB = s"$localDataDir/node-rollback-spec/nodeB/data"
@@ -27,8 +32,11 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
   val (dirA, dirB) = (new File(localVolumeA), new File(localVolumeB))
   dirA.mkdirs(); dirB.mkdirs()
 
+  // whenever nodeA mines, it mines alone (nodeB does not mine while it syncs, and the
+  // isolated miners have no connection), so it can poll fast, as in LongChainSyncSpec.
+  // nodeB polls slower, so its fork stays well under 128 blocks until it stops.
   val minerAConfig: Config = specialDataDirConfig(remoteVolumeA)
-    .withFallback(shortInternalMinerPollingInterval)
+    .withFallback(internalMinerPollingIntervalConfig(100))
     .withFallback(keepVersionsConfig(keepVersions))
     .withFallback(nodeSeedConfigs.head)
     .withFallback(allowLocalConfig)
@@ -105,6 +113,9 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
     snapshot(phase, "A", nodeA, budget).zip(snapshot(phase, "B", nodeB, budget))
   }
 
+  private def headersAheadOfFullBlocks(info: NodeInfo): Int =
+    info.bestHeaderHeightOpt.getOrElse(0) - info.bestBlockHeightOpt.getOrElse(0)
+
   private def waitForSameBestBlock(
     nodeA: Node,
     nodeB: Node,
@@ -145,7 +156,7 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
 
     val result: Future[Unit] = Async.async {
 
-      // 1. Let nodeA mine and sync nodeB
+      // 1. Let nodeA mine a shared chain of `sharedChainLength` blocks and sync nodeB
 
       val minerAGen: Node = docker.startDevNetNode(minerAConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
@@ -153,8 +164,8 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       val minerBGen: Node = docker.startDevNetNode(minerBConfigNonGen,
         specialVolumeOpt = Some((localVolumeB, remoteVolumeB))).get
 
-      Async.await(minerAGen.waitForHeight(1))
-      Async.await(minerBGen.waitForHeight(1))
+      Async.await(minerAGen.waitForHeight(sharedChainLength))
+      Async.await(minerBGen.waitForHeight(sharedChainLength))
 
       val genesisAGen = Async.await(minerAGen.headerIdsByHeight(ErgoHistoryUtils.GenesisHeight)).head
       val genesisBGen = Async.await(minerBGen.headerIdsByHeight(ErgoHistoryUtils.GenesisHeight)).head
@@ -168,28 +179,70 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       genesisAGen shouldBe genesisBGen
       Async.await(observeNodes("initial shared chain", minerAGen, minerBGen))
 
+      // nodeB's miner starts in isolation only if its headers are fewer than 6 above its
+      // full blocks; 3 leaves room for the headers nodeB still gets while nodeA stops, so
+      // `sharedHeight` is only a lower bound of nodeB's fork base
+      val lastSharedInfo = Async.await(
+        minerBGen.waitForProgress[NodeInfo, Int](
+          "nodeB's headers less than 3 ahead of its full blocks",
+          _.info,
+          headersAheadOfFullBlocks(_) < 3,
+          100.millis
+        )(_.bestBlockHeightOpt, i => s"headers ahead: ${headersAheadOfFullBlocks(i)}")
+      )
+      val sharedHeight = lastSharedInfo.bestBlockHeightOpt.value
+
       // 2. Stop all nodes
       docker.stopNode(minerAGen.containerId)
       docker.stopNode(minerBGen.containerId)
+      // `noConnectionsConfig` blocks every connection; removing the peer databases as
+      // well is a second guard
+      docker.removeFromMountedVolume(localVolumeA, remoteVolumeA, "peers")
+      docker.removeFromMountedVolume(localVolumeB, remoteVolumeB, "peers")
 
-      val minerAIsolated: Node = docker.startDevNetNode(minerAConfig, isolatedPeersConfig,
+      val minerAIsolated: Node = docker.startDevNetNode(minerAConfig, noConnectionsConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
 
-      // 1. Let nodeA mine `chainLength + delta` blocks in isolation
-      Async.await(minerAIsolated.waitForHeight(chainLength + delta))
+      // 1. Let nodeA mine in isolation up to `chainLength + delta` blocks above the
+      // shared chain; its lead of at least `delta` (more than 128 blocks) puts nodeB on
+      // the far-behind download path when it switches (#2673)
+      Async.await(minerAIsolated.waitForHeight(sharedHeight + chainLength + delta))
 
-      val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, isolatedPeersConfig,
+      val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, noConnectionsConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolumeB))).get
       Async.await(observeNodes("isolated miners started", minerAIsolated, minerBIsolated))
+      // in isolation nodeB gets no new headers, so its miner never starts if its headers
+      // are 6 or more above its full blocks
+      val minerBStartGap = headersAheadOfFullBlocks(Async.await(minerBIsolated.info))
+      withClue("nodeB's headers above its full blocks at its isolated start: ") {
+        minerBStartGap should be < 6
+      }
 
       // 2. Let nodeB mine `chainLength` blocks in isolation
-      Async.await(minerBIsolated.waitForHeight(chainLength, 100.millis))
+      Async.await(minerBIsolated.waitForHeight(sharedHeight + chainLength, 100.millis))
 
       log.info("Mining phase done")
 
       val minerABestHeight = Async.await(minerAIsolated.fullHeight)
       val minerBBestHeight = Async.await(minerBIsolated.fullHeight)
       Async.await(observeNodes("isolated mining complete", minerAIsolated, minerBIsolated))
+      // with no peers each miner mined its own fork: different blocks `chainLength / 2`
+      // below nodeB's tip show that nodeB has a deep rollback to do
+      val isolatedMiners = Seq(minerAIsolated, minerBIsolated)
+      val isolatedPeers = Async.await(Future.traverse(isolatedMiners) { node =>
+        node.connectedPeers.map(peers => node.nodeName -> peers.map(_.name))
+      })
+      isolatedPeers.filter(_._2.nonEmpty) shouldBe empty
+      val forkCheckHeight = minerBBestHeight - chainLength / 2
+      val forkIds = Async.await(Future.traverse(isolatedMiners) { node =>
+        node
+          .headerIdsByHeight(forkCheckHeight)
+          .map(ids => node.nodeName -> ids.headOption)
+      })
+      // both nodes hold a block at this height, and the blocks differ
+      withClue(s"header ids at height $forkCheckHeight: $forkIds: ") {
+        forkIds.flatMap(_._2).distinct should have size 2
+      }
 
       docker.stopNode(minerAIsolated.containerId)
       docker.stopNode(minerBIsolated.containerId)
@@ -197,7 +250,10 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       log.info("heightA: " + minerABestHeight)
       log.info("heightB: " + minerBBestHeight)
 
-      (minerABestHeight > minerBBestHeight) shouldBe true
+      // the far-behind download path needs a lead of more than 128 blocks
+      withClue(s"nodeA at $minerABestHeight, nodeB at $minerBBestHeight: ") {
+        minerABestHeight - minerBBestHeight should be > 128
+      }
 
       // 3. Restart nodeA and nodeB (having shorter chain) with disabled mining
       val minerA: Node = docker.startDevNetNode(minerAConfigNonGen,

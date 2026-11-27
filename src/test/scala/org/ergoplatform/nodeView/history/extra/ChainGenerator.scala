@@ -105,12 +105,15 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
       val block = proveCandidate(candidate.get)
 
       val headerAppend = history.append(block.header)
-      assert(headerAppend.isSuccess,
+      // `require`, not `assert`: this runs inside the indexer fixture actor. Akka
+      // restarts an actor after an `Exception`, but an `Error` such as `AssertionError`
+      // shuts down the actor system, and every later test then waits for its timeout.
+      require(headerAppend.isSuccess,
         s"append of header ${block.header.encodedId} at height ${block.header.height} failed: ${headerAppend.failed.map(_.toString)}")
       block.blockSections.foreach { s =>
         if (!history.contains(s)) {
           val res = history.append(s)
-          assert(res.isSuccess,
+          require(res.isSuccess,
             s"append of section ${s.encodedId} of block ${block.encodedId} at height ${block.header.height} failed: ${res.failed.map(_.toString)}")
         }
       }
@@ -121,7 +124,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
         lastOut
       }
 
-      assert(outToPassNext.isDefined)
+      require(outToPassNext.isDefined)
 
       log.info(
         s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")

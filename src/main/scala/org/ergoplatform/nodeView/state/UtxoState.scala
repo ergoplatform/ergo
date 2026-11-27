@@ -41,12 +41,13 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     with UtxoStateReader
     with ScorexEncoding {
 
-  import UtxoState.metadata
+  import UtxoState.{metadata, withinAdProofsSuffix}
 
   override def rootDigest: ADDigest = persistentProver.synchronized {
     persistentProver.digest
   }
 
+  /** After a `Failure`, discard this receiver: rollback may already have mutated the shared prover. */
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
@@ -54,6 +55,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
+          val actualRoot = p.digest
+          require(
+            actualRoot.sameElements(rootHash),
+            s"Unexpected root digest after rollback: expected=${Algos.encoder.encode(rootHash)}, " +
+              s"actual=${Algos.encoder.encode(actualRoot)}"
+          )
           new UtxoState(p, version, store, ergoSettings)
         }
         rollbackResult
@@ -194,7 +201,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
             }
 
             if (fb.adProofs.isEmpty) {
-              if (fb.height >= estimatedTip.getOrElse(Int.MaxValue) - ergoSettings.nodeSettings.adProofsSuffixLength) {
+              if (withinAdProofsSuffix(fb.height, estimatedTip, ergoSettings)) {
                 val adProofs = ADProofs(fb.header.id, proofBytes)
                 generate(LocallyGeneratedModifier(adProofs))
               }
@@ -279,6 +286,13 @@ object UtxoState {
 
     Array(idStateDigestIdxElem, stateDigestIdIdxElem, bestVersion, eb, cb)
   }
+
+  /**
+    * Whether a block at `height` gets its ADProofs generated: only within `adProofsSuffixLength` blocks of the
+    * estimated chain tip, and not while the tip is unknown.
+    */
+  def withinAdProofsSuffix(height: Height, estimatedTip: Option[Height], settings: ErgoSettings): Boolean =
+    height >= estimatedTip.getOrElse(Int.MaxValue) - settings.nodeSettings.adProofsSuffixLength
 
   /**
     * @return UTXO set based state on top of existing database, or genesis state if the database is empty

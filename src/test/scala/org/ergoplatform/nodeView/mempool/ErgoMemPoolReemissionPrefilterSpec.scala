@@ -7,10 +7,10 @@ import akka.util.Timeout
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.emission.EmissionRules.CoinsInOneErgo
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedMempool
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, DeclinedTransaction}
 import org.ergoplatform.nodeView.UtxoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction, TransactionFromRemote}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
@@ -134,6 +134,16 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
 
   private def process(f: Fixture, tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) =
     f.pool.process(UnconfirmedTransaction(tx, None), f.state)
+
+  private def repeatedTokenTransaction(f: Fixture): ErgoTransaction = {
+    val feeOutput = candidate(CoinsInOneErgo, f.s.chainSettings.monetary.feeProposition, Seq.empty)
+    val repeatedTokenOutput = candidate(
+      f.plainBox.value - CoinsInOneErgo,
+      Constants.TrueTree,
+      Seq(tokenOf(f.s, Long.MaxValue), tokenOf(f.s, 1L))
+    )
+    txSpending(Seq(f.plainBox), Seq(feeOutput, repeatedTokenOutput))
+  }
 
   private val PrefilterReason =
     "Mempool policy declines a transaction carrying the re-emission token in outputs"
@@ -330,6 +340,53 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     val inertPool = ErgoMemPool.empty(noEip27)
     val inertCtx = stateContext(UnitHeight, blockVersion = 1, noEip27)
     inertPool.outputsContainReemissionToken(Seq(outWithToken), inertCtx) shouldBe false
+  }
+
+  it should "handle repeated token entries in output candidates" in {
+    val f = fixture(checkRules = false)
+    val tx = repeatedTokenTransaction(f)
+
+    tx.inputs.head.spendingProof shouldBe ProverResult.empty
+    val (updatedPool, outcome) = process(f, tx)
+    declinedByPrefilter(outcome) shouldBe true
+    updatedPool.isInvalidated(tx.id) shouldBe true
+  }
+
+  it should "process remote transactions with repeated token entries" in {
+    implicit val system: ActorSystem = ActorSystem("prefilter-repeated-token-entries")
+    implicit val timeout: Timeout = Timeout(20.seconds)
+    try {
+      val f = fixture(checkRules = false)
+      val nvSettings = f.s.copy(directory = createTempDir.getAbsolutePath)
+      val holder = system.actorOf(Props(new PrefilterTestNodeViewHolder(nvSettings)))
+      val submitProbe = TestProbe()
+
+      submitProbe.send(holder, InjectState(f.state))
+      val ordinary = txSpending(
+        Seq(f.plainBox),
+        Seq(candidate(f.plainBox.value, Constants.TrueTree, Seq.empty))
+      )
+      submitProbe.send(holder, LocallyGeneratedTransaction(UnconfirmedTransaction(ordinary, None)))
+      submitProbe.expectMsgType[ProcessingOutcome.Accepted](10.seconds)
+
+      def installedPoolSize: Int = Await.result(
+        (holder ? GetDataFromCurrentView[UtxoState, Int](_.pool.size)).mapTo[Int],
+        10.seconds
+      )
+
+      installedPoolSize shouldBe 1
+
+      val eventProbe = TestProbe()
+      system.eventStream.subscribe(eventProbe.ref, classOf[DeclinedTransaction])
+      val remoteTx = repeatedTokenTransaction(f)
+      submitProbe.send(holder, TransactionFromRemote(UnconfirmedTransaction(remoteTx, None)))
+      val declined = eventProbe.expectMsgType[DeclinedTransaction](10.seconds)
+      declined.transaction.id shouldBe remoteTx.id
+
+      installedPoolSize shouldBe 1
+    } finally {
+      Await.ready(system.terminate(), 20.seconds)
+    }
   }
 
   // ------------------------------------------------------------------ (h)

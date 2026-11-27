@@ -10,6 +10,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.PrimitiveSecretKey
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils._
@@ -38,6 +39,19 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
+
+  property("checking a seed erases both inputs when no secret storage is loaded") {
+    withFixture { implicit w =>
+      // The test mnemonic fixture loads a prover without a secret storage file.
+      val mnemonic = SecretString.create("synthetic check seed")
+      val pass = SecretString.create("synthetic passphrase")
+      val mnemonicChars = mnemonic.getData()
+      val passChars = pass.getData()
+      await(wallet.checkSeed(mnemonic, Some(pass)).failed)
+      mnemonicChars.toSeq shouldBe Seq.fill(mnemonicChars.length)(' ')
+      passChars.toSeq shouldBe Seq.fill(passChars.length)(' ')
+    }
+  }
 
   property("assets in WalletDigest are deterministic against serialization") {
     forAll(Gen.listOfN(5, assetGen)) { preAssets =>

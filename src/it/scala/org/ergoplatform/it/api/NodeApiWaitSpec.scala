@@ -1,5 +1,6 @@
 package org.ergoplatform.it.api
 
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
@@ -124,6 +125,14 @@ class NodeApiWaitSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll {
   it should "still fail at once on an unexpected status" in {
     withNode(WaitPolicy(Some(1.minute), None, checkContainer = true)) { node =>
       failure(node.get("/fail")) shouldBe an[UnexpectedStatusCodeException]
+    }
+  }
+
+  "An unexpected status" should "serialize, so that a forked test JVM can report it" in {
+    withNode(WaitPolicy(Some(1.minute), None, checkContainer = true)) { node =>
+      val error = failure(node.get("/fail"))
+      val out   = new ObjectOutputStream(new ByteArrayOutputStream)
+      noException should be thrownBy out.writeObject(error)
     }
   }
 

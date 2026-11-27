@@ -15,7 +15,7 @@ import scorex.util.encode.Base16
 import sigma.data.ProveDlog
 
 import java.security.SecureRandom
-import scala.util.Failure
+import scala.util.{Failure, Try}
 import sigma.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
 
 class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
@@ -24,6 +24,9 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   with ScorexEncoding {
 
   private val SeedSize = 32
+  private val MaxSeedSize = 1024
+  private val MaxAddressLength = 6400
+  private val MaxErgoTreeHexLength = 2 * SigmaSerializer.MaxPropositionSize
   private val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -53,8 +56,13 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     ApiResponse(seed(SeedSize))
   }
 
-  def length: Route = (get & path("seed" / IntNumber)) { length =>
-    ApiResponse(seed(length))
+  def length: Route = (get & path("seed" / Segment)) { length =>
+    Try(length.toInt).toOption match {
+      case Some(value) if value >= 0 && value <= MaxSeedSize =>
+        ApiResponse(seed(value))
+      case _ =>
+        BadRequest(s"Seed length must be an integer between 0 and $MaxSeedSize bytes")
+    }
   }
 
   def hashBlake2b: Route = {
@@ -79,27 +87,41 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
       )
   }
 
-  def addressToRawR: Route = (get & path("addressToRaw" / Segment)) { addressStr =>
-    ergoAddressEncoder
-      .fromString(addressStr)
-      .map(address => address.contentBytes)
-      .map(Base16.encode)
-      .fold(
-        e => BadRequest(e.getMessage),
-        raw => ApiResponse(Map("raw" -> raw).asJson)
-      )
+  private def withAddressLengthCheck(addressStr: String)(route: => Route): Route = {
+    if (addressStr.length > MaxAddressLength) {
+      BadRequest(s"Address length must not exceed $MaxAddressLength characters")
+    } else {
+      route
+    }
   }
 
-  private def ergoTreeToAddressResponse(ergoTreeHex: String) = {
-    Base16
-      .decode(ergoTreeHex)
-      .flatMap { etBytes =>
-        ergoAddressEncoder.fromProposition(treeSerializer.deserializeErgoTree(etBytes))
-      }
-      .fold(
-        e => BadRequest(e.getMessage),
-        address => ApiResponse(Map("address" -> address.toString.asJson).asJson)
-      )
+  def addressToRawR: Route = (get & path("addressToRaw" / Segment)) { addressStr =>
+    withAddressLengthCheck(addressStr) {
+      ergoAddressEncoder
+        .fromString(addressStr)
+        .map(address => address.contentBytes)
+        .map(Base16.encode)
+        .fold(
+          e => BadRequest(e.getMessage),
+          raw => ApiResponse(Map("raw" -> raw).asJson)
+        )
+    }
+  }
+
+  private def ergoTreeToAddressResponse(ergoTreeHex: String): Route = {
+    if (ergoTreeHex.length > MaxErgoTreeHexLength) {
+      BadRequest(s"ErgoTree hex length must not exceed $MaxErgoTreeHexLength characters")
+    } else {
+      Base16
+        .decode(ergoTreeHex)
+        .flatMap { etBytes =>
+          ergoAddressEncoder.fromProposition(treeSerializer.deserializeErgoTree(etBytes))
+        }
+        .fold(
+          e => BadRequest(e.getMessage),
+          address => ApiResponse(Map("address" -> address.toString.asJson).asJson)
+        )
+    }
   }
 
   def ergoTreeToAddressGetR: Route = (get & path("ergoTreeToAddress" / Segment))(ergoTreeToAddressResponse)
@@ -110,7 +132,7 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     }
   }
 
-  private def validateAddressResponse(addressStr: String) = {
+  private def validateAddressResponse(addressStr: String): Route = withAddressLengthCheck(addressStr) {
     val address = ergoAddressEncoder.fromString(addressStr)
     val error = address match {
       case Failure(exception) => Map("error" -> exception.getMessage.asJson)

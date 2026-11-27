@@ -57,7 +57,7 @@ class LiteClientExamples extends ErgoCorePropertyTest {
     val msg = "6cb37d0a202bc2984f43de003cbc5558804db45798d0fc8faae7390b96d42d15"
 
     //hash of "msgPreimage" (which is a header without PoW) should be equal to "msg"
-    Base16.encode(hashFn(msgPreimage)) == msg
+    Base16.encode(hashFn(msgPreimage)) shouldBe msg
 
     //Transactions Merkle tree digest is in bytes 65-96 (inclusive) of the unproven header
     val txsRoot = msgPreimage.slice(65, 97)

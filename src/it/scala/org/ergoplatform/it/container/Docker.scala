@@ -412,27 +412,40 @@ class Docker(
     )
 
     val targetPath = s"$remoteVolume/$relativePath"
+    runInMountedVolume(localVolume, remoteVolume, "rm", "-rf", targetPath)
+  }
+
+  /** Runs `command` in a helper container with `localVolume` mounted at `remoteVolume`,
+    * and returns once the command has finished. */
+  private[container] def runInMountedVolume(
+    localVolume: String,
+    remoteVolume: String,
+    command: String*
+  ): Unit = {
     val hostConfig =
       new HostConfig().withBinds(new Bind(localVolume, new Volume(remoteVolume)))
-    val cleanupContainerId = client
+    val helperContainerId = client
       .createContainerCmd(ErgoImageLatest)
       .withHostConfig(hostConfig)
-      .withEntrypoint("rm", "-rf", targetPath)
+      .withEntrypoint(command: _*)
       .exec()
       .getId
 
-    val waitCallback = waitContainer(cleanupContainerId)
     try {
-      client.startContainerCmd(cleanupContainerId).exec()
-      val exitCode = waitCallback.awaitStatusCode(60, TimeUnit.SECONDS)
+      client.startContainerCmd(helperContainerId).exec()
+      // start before waiting: a wait on a container that has not started yet returns at
+      // once, and the forced removal below would then kill the command
+      val waitCallback = waitContainer(helperContainerId)
+      val exitCode =
+        try waitCallback.awaitStatusCode(60, TimeUnit.SECONDS)
+        finally waitCallback.close()
       if (exitCode != 0) {
         throw new IllegalStateException(
-          s"Volume cleanup failed for $targetPath with exit code $exitCode"
+          s"'${command.mkString(" ")}' failed with exit code $exitCode"
         )
       }
     } finally {
-      waitCallback.close()
-      client.removeContainerCmd(cleanupContainerId).withForce(true).exec()
+      client.removeContainerCmd(helperContainerId).withForce(true).exec()
     }
   }
 

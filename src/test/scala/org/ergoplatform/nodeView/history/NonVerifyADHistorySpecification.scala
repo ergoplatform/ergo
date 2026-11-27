@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.consensus.{Equal, Fork, Older, Younger}
+import org.ergoplatform.consensus.{Equal, Fork, Older, Unknown, Younger}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -142,6 +142,32 @@ class NonVerifyADHistorySpecification extends ErgoCorePropertyTest {
     val si2 = history2.syncInfoV2(full = true)
     val continuation2 = history1.continuationIds(si2, BlocksInChain * 100)
     fork1.headers.foreach(h => continuation2.exists(_._2 == h.id) shouldBe true)
+  }
+
+  property("V2 continuation ignores a retained header outside the selected chain") {
+    var leader = genHistory()
+    val common = genHeaderChain(9, leader, diffBitsOpt = None, useRealTs = false)
+    leader = applyHeaderChain(leader, common)
+    val selectedTail = genHeaderChain(35, Some(common.last), leader.difficultyCalculator,
+      diffBitsOpt = None, useRealTs = false).tail
+    val sideTail = genHeaderChain(35, Some(common.last), leader.difficultyCalculator,
+      extensionHash = Algos.hash(Array[Byte](1)), diffBitsOpt = None, useRealTs = false).tail
+    leader = applyHeaderChain(leader, selectedTail)
+    leader = applyHeaderChain(leader, sideTail.take(19))
+
+    leader.bestHeaderOpt.get.id shouldBe selectedTail.last.id
+    leader.contains(sideTail(18).id) shouldBe true
+    // Explicit sparse locator: full sync info may also advertise a shared genesis anchor.
+    val currentSummary = ErgoSyncInfoV2(Seq(sideTail.last, sideTail(18)))
+    currentSummary.lastHeaders.map(_.height) shouldBe Seq(44, 28)
+    leader.compareV2(currentSummary) shouldBe Unknown
+    leader.continuationIdsV2(currentSummary, 100) shouldBe empty
+
+    val advertised = ErgoSyncInfoV2(currentSummary.lastHeaders :+ common.head)
+    leader.compareV2(advertised) shouldBe Fork
+    val continuation = leader.continuationIdsV2(advertised, 100)
+    continuation.head._2 shouldBe common.headers(1).id
+    continuation.last._2 shouldBe selectedTail.last.id
   }
 
   property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {

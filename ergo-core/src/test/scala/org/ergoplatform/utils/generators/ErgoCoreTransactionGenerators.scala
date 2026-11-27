@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.settings.{Constants, Parameters}
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform._
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
@@ -54,7 +55,14 @@ object ErgoCoreTransactionGenerators extends ScorexLogging {
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
-    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = EmptyHistoryHeight)
+    // enough for the node's validUnsignedTransactionFromBoxes to spend the box alone
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    ergoBoxGen(
+      propGen     = propositionGen,
+      tokensGen   = Gen.oneOf(tokens, tokens),
+      valueGenOpt = Some(validValueGen.map(Math.max(_, minValue))),
+      heightGen   = EmptyHistoryHeight
+    )
   }
 
   def unspendableErgoBoxGen(minValue: Long = parameters.minValuePerByte * 200,

@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "6.0.8"
+  version: "6.0.9"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -563,6 +563,7 @@ components:
     ErgoAddress:
       description: Encoded Ergo Address
       type: string
+      maxLength: 6400
       example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
 
     RewardAddress:
@@ -939,11 +940,11 @@ components:
         costLimit:
           type: integer
           format: int64
-          description: hard limit on accumulated execution cost, if exceeded lead to CostLimitException to be thrown
+          description: Requested execution cost limit. The node overrides it with its configured maximum transaction cost.
         initCost:
           type: integer
           format: int64
-          description: initial value of execution cost already accumulated before Interpreter.verify is called
+          description: initial value of execution cost already accumulated before Interpreter.verify is called; negative values are clamped to zero
 
 
     ExecuteScript:
@@ -957,6 +958,7 @@ components:
         script:
           description: Sigma script to be executed
           type: string
+          maxLength: 32768
         namedConstants:
           description: Environment for compiler
           type: object
@@ -979,6 +981,7 @@ components:
         source:
           description: Source code of the ErgoScript to be compiled
           type: string
+          maxLength: 32768
         treeVersion:
           description: Version of ErgoTree to compile to
           type: integer
@@ -1543,6 +1546,29 @@ components:
           type: number
           example: 987654321
 
+    PowSolutionsRequest:
+      description: >
+        PoW solution submitted for the selected mining candidate. Autolykos V2
+        submissions may omit pk, w and d. When pk is omitted, the node uses the
+        selected candidate's miner key.
+      type: object
+      required:
+        - n
+      properties:
+        pk:
+          type: string
+          description: Base16-encoded public key
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        w:
+          type: string
+          example: '0366ea253123dfdb8d6d9ca2cb9ea98629e8f34015b1e4ba942b1d88badfcc6a12'
+        n:
+          type: string
+          example: '0000000000000000'
+        d:
+          type: number
+          example: 987654321
+
     BlockHeaderWithoutPow:
       type: object
       required:
@@ -2071,8 +2097,8 @@ components:
       properties:
         msg:
           type: string
-          description: Base16-encoded block header bytes without PoW solution
-          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+          description: Base16-encoded Blake2b256 hash of the serialized block header without its PoW solution.
+          example: '6cb37d0a202bc2984f43de003cbc5558804db45798d0fc8faae7390b96d42d15'
         b:
           type: integer
           description: Work target value
@@ -2809,6 +2835,10 @@ paths:
   /blocks/at/{blockHeight}:
     get:
       summary: Get header ids at the given height
+      description: >-
+        Returns locally stored header ids, including forks. A retained raw row above
+        the selected best-header height may still be returned after invalidation;
+        its first id is not a selected-chain header.
       operationId: getFullBlockAt
       tags:
         - blocks
@@ -4084,6 +4114,7 @@ paths:
             schema:
               description: Encoded Ergo Address
               type: string
+              maxLength: 6400
               example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
       responses:
         '200':
@@ -4168,6 +4199,7 @@ paths:
           description: ErgoTree to derive an address from
           schema:
             type: string
+            maxLength: 8192
             example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       responses:
         '200':
@@ -4196,6 +4228,7 @@ paths:
           application/json:
             schema:
               type: string
+              maxLength: 8192
               example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
       responses:
         '200':
@@ -4221,9 +4254,12 @@ paths:
         - in: path
           name: length
           required: true
-          description: seed length in bytes
+          description: seed length in bytes (0-1024)
           schema:
-            type: string
+            type: integer
+            format: int32
+            minimum: 0
+            maximum: 1024
       responses:
         '200':
           description: Base16-encoded N byte seed
@@ -4232,6 +4268,12 @@ paths:
               schema:
                 type: string
                 example: '83375fd213cfd7dfd984ce1901d62c302a1db53160b416674c8da1a393a6bbc316'
+        '400':
+          description: Seed length is outside the range 0-1024
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:
@@ -5328,7 +5370,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PowSolutions'
+              $ref: '#/components/schemas/PowSolutionsRequest'
       responses:
         '200':
           description: Solution is valid

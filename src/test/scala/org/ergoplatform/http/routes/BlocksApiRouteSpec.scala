@@ -3,12 +3,15 @@ package org.ergoplatform.http.routes
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.testkit.TestProbe
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.NewBlockMined
+import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
@@ -49,6 +52,25 @@ class BlocksApiRouteSpec
       HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
     Post(prefix, blockJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "announce a posted block before handing it to the node view holder" in {
+    val (st, bh)             = createUtxoState(settings)
+    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
+    val blockJson: UniversalEntity =
+      HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
+    // one probe is both the view holder and the event subscriber, so its queue shows the order the route sent them in
+    val probe = TestProbe()
+    system.eventStream.subscribe(probe.ref, classOf[NewBlockMined])
+    try {
+      Post(prefix, blockJson) ~> BlocksApiRoute(probe.ref, digestReadersRef, settings).route ~> check {
+        status shouldBe StatusCodes.OK
+      }
+      probe.expectMsgType[NewBlockMined].header.id shouldBe block.header.id
+      probe.expectMsg(LocallyGeneratedModifier(block.header))
+    } finally {
+      system.eventStream.unsubscribe(probe.ref)
     }
   }
 

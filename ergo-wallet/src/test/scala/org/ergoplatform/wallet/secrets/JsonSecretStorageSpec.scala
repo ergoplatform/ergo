@@ -2,6 +2,7 @@ package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
+import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Arbitrary
@@ -57,6 +58,47 @@ class JsonSecretStorageSpec
 
       storage.secret.isEmpty shouldBe true
     }
+  }
+
+  property("checking a seed keeps the stored key while the caller erases inputs") {
+    val phrase = "synthetic check seed"
+    val phrasePass = "synthetic passphrase"
+    val encryptionPass = "synthetic wallet password"
+    val mnemonic = SecretString.create(phrase)
+    val mnemonicPass = SecretString.create(phrasePass)
+    val seed = try Mnemonic.toSeed(mnemonic, Some(mnemonicPass))
+    finally {
+      mnemonic.erase()
+      mnemonicPass.erase()
+    }
+    val dir = createTempDir
+    val settings = SecretStorageSettings(
+      dir.getAbsolutePath,
+      EncryptionSettings("HmacSHA1", 7, 256)
+    )
+    val storage = JsonSecretStorage.init(seed, SecretString.create(encryptionPass),
+      usePre1627KeyDerivation = false)(settings)
+
+    def checkAndEraseInputs(candidatePhrase: String, candidatePass: Option[String], expected: Boolean): Unit = {
+      val input = SecretString.create(candidatePhrase)
+      val pass = candidatePass.map(SecretString.create)
+      val inputChars = input.getData()
+      val passChars = pass.map(_.getData())
+      try storage.checkSeed(input, pass) shouldBe expected
+      finally {
+        input.erase()
+        pass.foreach(_.erase())
+      }
+      inputChars.toSeq shouldBe Seq.fill(inputChars.length)(' ')
+      passChars.foreach(chars => chars.toSeq shouldBe Seq.fill(chars.length)(' '))
+    }
+
+    checkAndEraseInputs(phrase, Some(phrasePass), expected = false)
+    storage.unlock(SecretString.create(encryptionPass)) shouldBe 'success
+    checkAndEraseInputs(phrase, Some(phrasePass), expected = true)
+    checkAndEraseInputs("another synthetic phrase", Some(phrasePass), expected = false)
+    checkAndEraseInputs(phrase, None, expected = false)
+    storage.secret.get.isErased shouldBe false
   }
 
   property("restore from mnemonic") {

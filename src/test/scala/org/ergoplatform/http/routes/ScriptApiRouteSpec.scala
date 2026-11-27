@@ -57,12 +57,16 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       |}
       |""".stripMargin
 
-  it should "execute script with context" in {
-    val suffix = "/executeWithContext"
+  private def executeScriptRequest: Json = {
     val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
     val req = scala.io.Source.fromInputStream(stream).getLines().mkString("\n")
-    val assertion = (json: Json) => {
+    io.circe.parser.parse(req).toOption.get
+  }
+
+  it should "execute script with context" in {
+    Post(prefix + "/executeWithContext", executeScriptRequest) ~> route ~> check {
       status shouldBe StatusCodes.OK
+      val json = responseAs[Json]
       val value = json.hcursor.downField("value").downField("op").as[Int].right.get
       val condition = json.hcursor.downField("value").downField("condition").as[Boolean].right.get
       val cost = json.hcursor.downField("cost").as[Int].right.get
@@ -70,8 +74,40 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       condition shouldEqual true
       cost shouldEqual 6
     }
-    val json = io.circe.parser.parse(req)
-    Post(prefix + suffix, json) ~> route ~> check(assertion(responseAs[Json]))
+  }
+
+  it should "use server-side execution cost limits" in {
+    val request = executeScriptRequest.mapObject { root =>
+      val context = root("context").flatMap(_.asObject).get
+      val updatedContext = context
+        .add("costLimit", 0.asJson)
+        .add("initCost", (-1).asJson)
+      root.add("context", updatedContext.asJson)
+    }
+
+    Post(prefix + "/executeWithContext", request) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("cost").as[Int] shouldBe Right(6)
+    }
+  }
+
+  it should "reject oversized script source" in {
+    val source = "1" * (32 * 1024 + 1)
+    val expectedDetail = Right("Script source length must not exceed 32768 characters")
+
+    Seq("/p2sAddress", "/p2shAddress").foreach { suffix =>
+      val request = Json.obj("source" -> source.asJson, "treeVersion" -> 0.asJson)
+      Post(prefix + suffix, request) ~> route ~> check {
+        status shouldBe StatusCodes.BadRequest
+        responseAs[Json].hcursor.downField("detail").as[String] shouldBe expectedDetail
+      }
+    }
+
+    val request = executeScriptRequest.mapObject(_.add("script", source.asJson))
+    Post(prefix + "/executeWithContext", request) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.downField("detail").as[String] shouldBe expectedDetail
+    }
   }
 
   it should "generate valid P2SAddress form source" in {

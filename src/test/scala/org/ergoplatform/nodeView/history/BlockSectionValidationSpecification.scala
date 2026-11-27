@@ -126,6 +126,30 @@ class BlockSectionValidationSpecification extends ErgoCorePropertyTest {
     commonChecks(history, block.extension, block.header)
   }
 
+  // estimatedTip is None exactly while the headers chain is not synced (ErgoHistoryReader.estimatedTip).
+  // In that window no section is accepted (bsHeadersChainSynced), so no block is completed and applied
+  // with estimatedTip = None.
+  property("While estimatedTip is None, no block section is accepted") {
+    val (history, block) = init()
+    try {
+      val sections: Seq[NonHeaderBlockSection] = Seq(block.blockTransactions, block.extension, block.adProofs.get)
+
+      history.isHeadersChainSyncedVar = false
+      history.estimatedTip() shouldBe None
+      sections.foreach { s =>
+        val refused = history.applicableTry(s)
+        refused shouldBe 'failure
+        refused.failed.get.getMessage should include("Headers-chain is not synchronized yet")
+      }
+
+      history.isHeadersChainSyncedVar = true
+      history.estimatedTip() shouldBe Some(history.headersHeight)
+      sections.foreach(s => history.applicableTry(s) shouldBe 'success)
+    } finally {
+      history.closeStorage()
+    }
+  }
+
   private def init(version: Header.Version = Header.InitialVersion,
                    stateType: StateType = StateType.Utxo) = {
     var history = genHistory(stateType)

@@ -170,8 +170,12 @@ object ErgoSettingsReader extends ScorexLogging
   private def consistentSettings(settings: ErgoSettings,
                                  desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
     val nodeSettings = settings.nodeSettings
+    val unsupportedVotingTargetIds = settings.votingTargets.targets.keySet -- VotingTargets.VoteableParameterIds
     if (nodeSettings.keepVersions < 0) {
       failWithError("nodeSettings.keepVersions should not be negative")
+    } else if (nodeSettings.stateType == Digest && nodeSettings.utxoSettings.utxoBootstrap) {
+      failWithError("UTXO snapshot bootstrap requires node.stateType = utxo; " +
+        "set node.utxo.utxoBootstrap = false for digest state")
     } else if (!nodeSettings.verifyTransactions && !nodeSettings.stateType.requireProofs) {
       failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
     } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
@@ -198,6 +202,9 @@ object ErgoSettingsReader extends ScorexLogging
         "nodeSettings.utxoBootstrap is set or nodeSettings.blocksToKeep >=0")
     } else if (nodeSettings.nipopowSettings.nipopowBootstrap && settings.chainSettings.genesisId.isEmpty) {
       failWithError("nodeSettings.popowBootstrap is set but genesisId is not")
+    } else if (nodeSettings.mining && unsupportedVotingTargetIds.nonEmpty) {
+      val badIds = unsupportedVotingTargetIds.toSeq.sorted.mkString(", ")
+      failWithError(s"Unsupported voting target parameter id(s): $badIds")
     } else {
       settings
     }

@@ -6487,6 +6487,105 @@ paths:
             type: integer
             format: int32
             default: 5
+        - in: query
+          name: relevantInputs
+          required: false
+          description: >-
+            if true, the inputs of each transaction list only the boxes guarded by the given
+            address (whose ErgoTree is the tree of the address)
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: relevantOutputs
+          required: false
+          description: >-
+            if true, the outputs of each transaction list only the boxes guarded by the given
+            address (whose ErgoTree is the tree of the address) and the fee outputs (guarded by
+            the fee proposition)
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
+        '200':
+          description: transactions associated with wanted address
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: Array of transactions
+                    items:
+                      $ref: '#/components/schemas/IndexedErgoTransaction'
+                  total:
+                    type: integer
+                    description: Total count of retrieved transactions
+        '404':
+          description: No transactions found for wanted address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/transaction/byAddress/{address}:
+    get:
+      summary: Retrieve transactions by their associated address
+      operationId: getTxsByAddressGet
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: address
+          required: true
+          description: address associated with transactions
+          schema:
+            type: string
+            example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+        - in: query
+          name: relevantInputs
+          required: false
+          description: >-
+            if true, the inputs of each transaction list only the boxes guarded by the given
+            address (whose ErgoTree is the tree of the address)
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: relevantOutputs
+          required: false
+          description: >-
+            if true, the outputs of each transaction list only the boxes guarded by the given
+            address (whose ErgoTree is the tree of the address) and the fee outputs (guarded by
+            the fee proposition)
+          schema:
+            type: boolean
+            default: false
       responses:
         '503':
           $ref: '#/components/responses/ExtraIndexRecovering'

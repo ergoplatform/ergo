@@ -208,7 +208,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private def getBestInputBlockR = {
     (pathPrefix("bestInputBlock") & get) {
       ApiResponse(getHistory.map{ h =>
-        val bh = h.bestHeaderOpt.map(_.id)
+        val bh = h.bestFullBlockOpt.map(_.header.id)
         val bi = h.bestInputBlock().map(_.id)
         Json.obj("bestOrdering" -> bh.getOrElse("").asJson, "bestInputBlock" -> bi.getOrElse("").asJson)
       })
@@ -222,7 +222,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private def getBestInputBlocksChainR = {
     (pathPrefix("bestInputChain") & get) {
       ApiResponse(getHistory.map{ h =>
-        val bh = h.bestHeaderOpt.map(_.id)
+        val bh = h.bestFullBlockOpt.map(_.header.id)
         val bi = h.bestInputBlocksChain()
         Json.obj("bestOrdering" -> bh.getOrElse("").asJson, "bestInputBlocks" -> bi.asJson)
       })

@@ -101,9 +101,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
         val inputBlockTransactions = history.bestInputBlocksChain().flatMap { id =>
           history.getInputBlockTransactions(id).getOrElse(Seq.empty)
         }
+        val stateWithPool = utxoState.withMempoolAndInputBlocks(pool, inputBlockTransactions)
         inputs.flatMap { input =>
-          utxoState.withMempoolAndInputBlocks(pool, inputBlockTransactions)
-            .boxById(input.boxId).map(box => input.boxId -> box)
+          stateWithPool.boxById(input.boxId).map(box => input.boxId -> box)
         }.toMap
       case _ =>
         Map.empty

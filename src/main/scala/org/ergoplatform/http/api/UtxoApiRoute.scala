@@ -47,7 +47,8 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     (post & path("withPool" / "byIds") & entity(as[Seq[String]])) { ids =>
       ApiResponse(getStateAndPool.map {
         case (history, usr: UtxoStateReader, mp) =>
-          ids.flatMap(id => usr.withMempoolAndInputBlocks(mp, inputBlockTransactions(history)).boxById(ADKey @@ Base16.decode(id).get))
+          val stateWithPool = usr.withMempoolAndInputBlocks(mp, inputBlockTransactions(history))
+          ids.flatMap(id => stateWithPool.boxById(ADKey @@ Base16.decode(id).get))
         case _ => Seq.empty
       })
     }

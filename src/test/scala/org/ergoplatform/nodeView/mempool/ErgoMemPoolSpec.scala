@@ -414,6 +414,39 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.contains(tx3.transaction) shouldBe false
   }
 
+  it should "evict conflicting mempool transactions in removeWithDoubleSpends even when mined tx is not in pool and preserve stats" in {
+    val priorRemovedTx = UnconfirmedTransaction(feeTx(inputSeed = 1: Byte, fee = 1000000L), None)
+    val unrelatedTx = UnconfirmedTransaction(feeTx(inputSeed = 2: Byte, fee = 1000000L), None)
+    val conflictingTx = UnconfirmedTransaction(feeTx(inputSeed = 3: Byte, fee = 1000000L), None)
+    val minedConflictingTx = feeTx(inputSeed = 3: Byte, fee = 2000000L)
+    val minedUnrelatedTx = feeTx(inputSeed = 4: Byte, fee = 1500000L)
+
+    minedConflictingTx.inputs.head.boxId shouldBe conflictingTx.transaction.inputs.head.boxId
+    minedConflictingTx.id should not be conflictingTx.transaction.id
+
+    var pool = ErgoMemPool.empty(settings)
+      .put(priorRemovedTx)
+      .put(unrelatedTx)
+      .put(conflictingTx)
+
+    // Establish non-zero takenTxns stat before calling removeWithDoubleSpends
+    pool = pool.removeTxAndDoubleSpends(priorRemovedTx.transaction)
+    pool.stats.takenTxns shouldBe 1
+
+    // Removing a mined tx absent from the pool with no conflicts must not reset mempool stats
+    pool = pool.removeWithDoubleSpends(Seq(minedUnrelatedTx))
+    pool.stats.takenTxns shouldBe 1
+    pool.contains(conflictingTx.transaction.id) shouldBe true
+    pool.contains(unrelatedTx.transaction.id) shouldBe true
+
+    // minedConflictingTx is NOT in the pool, yet removeWithDoubleSpends must still evict conflictingTx
+    // and must not reset mempool statistics
+    pool = pool.removeWithDoubleSpends(Seq(minedConflictingTx))
+    pool.contains(conflictingTx.transaction.id) shouldBe false
+    pool.contains(unrelatedTx.transaction.id) shouldBe true
+    pool.stats.takenTxns shouldBe 2
+  }
+
   it should "return results take / getAll / getAllPrioritized sorted by priority" in {
     val feeProp = settings.chainSettings.monetary.feeProposition
 

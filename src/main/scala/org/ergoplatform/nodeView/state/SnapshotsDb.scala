@@ -44,43 +44,46 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     val manifestSerializer = ManifestSerializer.defaultSerializer
 
     if (manifests.size > toStore) {
+      val toPrune = manifests.dropRight(toStore)
+      val toLeave = manifests.takeRight(toStore)
 
-      val lastManifestBytesOpt = store.get(manifests.last._2)
-      val lastManifestSubtrees =
-        lastManifestBytesOpt
+      val keptManifestIds = toLeave.map { case (_, id) => Algos.encode(id) }.toSet
+      val keptSubtrees = toLeave.flatMap { case (_, id) =>
+        store.get(id)
           .flatMap(bs => manifestSerializer.parseBytesTry(bs).toOption)
           .map(_.subtreesIds)
           .getOrElse(ArrayBuffer.empty)
           .map(Algos.encode)
-          .toSet
-
-      val toPrune = manifests.dropRight(toStore)
-      val toLeave = manifests.takeRight(toStore)
+      }.toSet
 
       toPrune.foreach { case (h, manifestId) =>
         val pt0 = System.currentTimeMillis()
-        val keysToRemove: Array[Array[Byte]] = store.get(manifestId) match {
-          case Some(manifestBytes) =>
-            manifestSerializer.parseBytesTry(manifestBytes) match {
-              case Success(m) =>
-                val keys = mutable.ArrayBuilder.make[Array[Byte]]()
-                val subtrees = m.subtreesIds
-                keys.sizeHint(subtrees.size + 1)
-                keys += manifestId
-                // filter out subtrees which are the same in the latest version of tree snapshot
-                subtrees.foreach { subtreeId =>
-                  if (!lastManifestSubtrees.contains(Algos.encode(subtreeId))) {
-                    keys += subtreeId
+        val keysToRemove: Array[Array[Byte]] = if (keptManifestIds.contains(Algos.encode(manifestId))) {
+          Array.empty
+        } else {
+          store.get(manifestId) match {
+            case Some(manifestBytes) =>
+              manifestSerializer.parseBytesTry(manifestBytes) match {
+                case Success(m) =>
+                  val keys = mutable.ArrayBuilder.make[Array[Byte]]()
+                  val subtrees = m.subtreesIds
+                  keys.sizeHint(subtrees.size + 1)
+                  keys += manifestId
+                  // filter out subtrees still referenced by any retained snapshot
+                  subtrees.foreach { subtreeId =>
+                    if (!keptSubtrees.contains(Algos.encode(subtreeId))) {
+                      keys += subtreeId
+                    }
                   }
-                }
-                keys.result()
-              case Failure(e) =>
-                log.error(s"Can't parse manifest ${Base16.encode(manifestId)} :", e)
-                Array.empty
-            }
-          case None =>
-            log.error(s"Manifest ${Base16.encode(manifestId)} not found when should be pruned")
-            Array.empty
+                  keys.result()
+                case Failure(e) =>
+                  log.error(s"Can't parse manifest ${Base16.encode(manifestId)} :", e)
+                  Array.empty
+              }
+            case None =>
+              log.error(s"Manifest ${Base16.encode(manifestId)} not found when should be pruned")
+              Array.empty
+          }
         }
         store.remove(keysToRemove)
         val pt = System.currentTimeMillis()

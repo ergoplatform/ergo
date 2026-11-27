@@ -4248,9 +4248,12 @@ paths:
         - in: path
           name: length
           required: true
-          description: seed length in bytes
+          description: seed length in bytes (0-1024)
           schema:
-            type: string
+            type: integer
+            format: int32
+            minimum: 0
+            maximum: 1024
       responses:
         '200':
           description: Base16-encoded N byte seed
@@ -4259,6 +4262,12 @@ paths:
               schema:
                 type: string
                 example: '83375fd213cfd7dfd984ce1901d62c302a1db53160b416674c8da1a393a6bbc316'
+        '400':
+          description: Seed length is outside the range 0-1024
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

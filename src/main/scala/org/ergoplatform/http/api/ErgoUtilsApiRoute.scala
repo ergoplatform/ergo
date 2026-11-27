@@ -15,7 +15,7 @@ import scorex.util.encode.Base16
 import sigma.data.ProveDlog
 
 import java.security.SecureRandom
-import scala.util.Failure
+import scala.util.{Failure, Try}
 import sigma.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
 
 class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
@@ -24,6 +24,7 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   with ScorexEncoding {
 
   private val SeedSize = 32
+  private val MaxSeedSize = 1024
   private val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -53,8 +54,13 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     ApiResponse(seed(SeedSize))
   }
 
-  def length: Route = (get & path("seed" / IntNumber)) { length =>
-    ApiResponse(seed(length))
+  def length: Route = (get & path("seed" / Segment)) { length =>
+    Try(length.toInt).toOption match {
+      case Some(value) if value >= 0 && value <= MaxSeedSize =>
+        ApiResponse(seed(value))
+      case _ =>
+        BadRequest(s"Seed length must be an integer between 0 and $MaxSeedSize bytes")
+    }
   }
 
   def hashBlake2b: Route = {

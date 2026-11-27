@@ -35,6 +35,34 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 
+  it should "generate a 32 byte seed by default" in {
+    Get(s"$prefix/seed") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val seed = responseAs[Json].as[String].toOption.get
+      Base16.decode(seed).get.length shouldBe 32
+    }
+  }
+
+  it should "generate seeds up to the maximum requested length" in {
+    Seq(0, 32, 1024).foreach { length =>
+      Get(s"$prefix/seed/$length") ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        val seed = responseAs[Json].as[String].toOption.get
+        Base16.decode(seed).get.length shouldBe length
+      }
+    }
+  }
+
+  it should "reject invalid seed lengths" in {
+    Seq("-1", "1025", Int.MaxValue.toString, "not-a-number").foreach { length =>
+      Get(s"$prefix/seed/$length") ~> route ~> check {
+        status shouldBe StatusCodes.BadRequest
+        val detail = responseAs[Json].hcursor.downField("detail").as[String]
+        detail shouldBe Right("Seed length must be an integer between 0 and 1024 bytes")
+      }
+    }
+  }
+
   it should "derive address from ErgoTree (p2s)" in {
     val et = Base16.encode(treeSerializer.serializeErgoTree(p2saddress.script))
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {

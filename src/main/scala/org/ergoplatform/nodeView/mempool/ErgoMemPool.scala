@@ -12,6 +12,7 @@ import OrderedTxPool.{feeForFactor, saturatedAverage, saturatingAdd, scaledFeePe
 import ErgoMemPool.{Available, BudgetExceeded, InputAvailability, Missing, UnresolvedProducer}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
+import sigma.Extensions._
 import sigma.VersionContext
 import spire.syntax.all.cfor
 
@@ -319,7 +320,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   private[mempool] def outputsContainReemissionToken(outputCandidates: Seq[ErgoBoxCandidate],
                                                      ctx: ErgoStateContext): Boolean = {
     val reemissionTokenId = ctx.chainSettings.reemission.reemissionTokenId
-    reemissionTokenId.nonEmpty && outputCandidates.exists(_.tokens.contains(reemissionTokenId))
+    reemissionTokenId.nonEmpty && outputCandidates.exists { output =>
+      output.additionalTokens.exists(_._1.toModifierId == reemissionTokenId)
+    }
   }
 
   /**

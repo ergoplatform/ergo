@@ -565,35 +565,31 @@ trait InputBlocksProcessor extends ScorexLogging {
         return Seq.empty -> Seq.empty
       }
 
-      /**
-       * Determines if a fork switch is needed based on chain lengths and available transactions.
-       *
-       * A fork switch is needed when:
-       * 1. The longest chain is different from the best chain
-       * 2. The depth of the current block in the longest chain is greater than the best chain depth
-       * 3. All blocks from the current processing point to the target depth have available transactions
-       */
-      def switchNeeded(id: ModifierId): Boolean = {
-        val lf = forks(longestIndex)  // Get the longest fork
-        val d  = lf.depthOf(id)      // Get the depth of the current block in the longest fork
-        val needed = d > bestDepth && {  // Switch if longest fork is deeper than best fork
-          // Verify that all blocks from current processing point to target depth have transactions
-          (lf.processedIndex + 1 to d).forall { i =>
-            val id = lf.chain(i)
-            inputBlockTransactions.contains(id)  // Check if transactions are available
+      // Header-only suffixes must not prevent another fork's complete prefix from
+      // competing. Count contiguous available bodies, then validate them before
+      // reporting any rollback or replacing the current best fork.
+      var switchIndex = -1
+      var switchDepth = currentBestDepth
+      forks.indices.foreach { idx =>
+        val f = forks(idx)
+        if (idx != bestIndex && f.depthOf(ib.id) > f.processedIndex) {
+          var depth = f.processedIndex
+          while (depth + 1 < f.chain.length &&
+                 inputBlockTransactions.contains(f.chain(depth + 1))) {
+            depth += 1
+          }
+          if (depth > switchDepth) {
+            switchIndex = idx
+            switchDepth = depth
           }
         }
-        if (needed) {
-          log.info(s"Fork switch needed: longest fork depth $d > best fork depth ${bestDepth}")
-        }
-        needed
       }
 
-      if (extendingBestIndex == -1 && longestIndex != bestIndex && switchNeeded(ib.id)) { // forking case
-        log.info(s"Performing fork switch from fork ${bestIndex} to fork ${longestIndex}")
+      if (extendingBestIndex == -1 && switchIndex != -1) { // forking case
+        log.info(s"Performing fork switch from fork ${bestIndex} to fork ${switchIndex}")
 
-        val currentFork = forks(bestIndex)  // Current best fork (to be abandoned)
-        val newFork    = forks(longestIndex)  // New best fork (to be switched to)
+        val currentFork = forks(bestIndex)
+        val newFork = forks(switchIndex)
 
         // Calculate which blocks need to be rolled back
         val rollbackInputBlocks = {
@@ -606,7 +602,7 @@ trait InputBlocksProcessor extends ScorexLogging {
               commonIdx = idx
             }
           }
-          if(commonIdx == -1 || commonIdx == currentFork.processedIndex){
+          if (commonIdx == currentFork.processedIndex) {
             Seq.empty  // Nothing to roll back if common ancestor is at the same level or higher
           } else {
             // Extract the blocks that need to be rolled back (from common ancestor + 1 to processed tip)
@@ -632,9 +628,9 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
         val r = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
 
-        if (r._2.nonEmpty) {
-          // Update the tree with the processed chain
-          var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
+        if (r._2.nonEmpty && r._1.processedIndex > currentBestDepth) {
+          // Only a validated prefix deeper than the current best can win.
+          var updTree  = new InputBlocksTree(forks.updated(switchIndex, r._1))
           val updForks = updTree.forks
 
           // Register completion for any other forks that were waiting for this block
@@ -644,7 +640,7 @@ trait InputBlocksProcessor extends ScorexLogging {
               // todo: pass real cost of input block instead of costDelta = 0
               f.registerCompletion(ib.id, costDelta = 0) match {
                 case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
                 case Failure(e) =>
                   log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }
@@ -674,7 +670,7 @@ trait InputBlocksProcessor extends ScorexLogging {
               // todo: pass real cost of input block instead of costDelta = 0
               f.registerCompletion(ib.id, costDelta = 0) match {
                 case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
                 case Failure(e) =>
                   log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }

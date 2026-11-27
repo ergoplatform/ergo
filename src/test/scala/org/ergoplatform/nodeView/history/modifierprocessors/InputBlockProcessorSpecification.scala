@@ -395,7 +395,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id) // no switching yet
 
-    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe (Seq(ib2.id, ib3.id) -> Seq.empty)
+    // A disjoint switch must report the old processed root for rollback too.
+    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe (Seq(ib2.id, ib3.id) -> Seq(ib1.id))
     h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id)
   }
 
@@ -3878,6 +3879,82 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
         f.history.bestInputBlock() shouldBe Some(winner)
         f.history.bestInputBlocksChain() shouldBe Seq(winner.id, ibA.id)
       }
+    }
+  }
+
+  property("sibling completion retains progress through a cached grandchild") {
+    withInvalidBodyFixture { f =>
+      val a = f.rootIb()
+      val txA = f.spendBox(f.spendableBoxes(0))
+      f.history.applyInputBlock(a)
+      f.history.applyInputBlockTransactions(a.id, Seq(txA), f.state)
+      val missing = f.childIb(a)
+      val b = f.childIb(a)
+      val c1 = f.childIb(b)
+      val c2 = f.childIb(b)
+      Seq(missing, b, c1, c2).foreach(f.history.applyInputBlock(_))
+      val txB = f.spendBox(txA.outputs.head)
+      val txC = f.spendBox(txB.outputs.head)
+      f.history.applyInputBlockTransactions(c1.id, Seq(txC), f.state) shouldBe
+        (Seq.empty -> Seq.empty)
+      f.history.applyInputBlockTransactions(b.id, Seq(txB), f.state) shouldBe
+        (Seq(b.id, c1.id) -> Seq.empty)
+      f.history.bestInputBlock() shouldBe Some(c1)
+      f.history.bestInputBlocksChain() shouldBe Seq(c1.id, b.id, a.id)
+      f.candidateNamedParent(f.buildCandidate(Seq.empty)) shouldBe Some(c1.id)
+    }
+  }
+
+  property("complete competing roots beat a longer missing or invalid body suffix") {
+    for (invalidBody <- Seq(false, true)) {
+      withInvalidBodyFixture { f =>
+        val a = f.rootIb()
+        f.history.applyInputBlock(a)
+        f.history.applyInputBlockTransactions(a.id, Seq(f.spendBox(f.spendableBoxes(0))), f.state)
+        val x1 = f.childIb(a)
+        val x2 = f.childIb(x1)
+        val x3 = f.childIb(x2)
+        Seq(x1, x2, x3).foreach(f.history.applyInputBlock(_))
+        if (invalidBody) {
+          f.history.applyInputBlockTransactions(x1.id, Seq(f.invalidTx), f.state)
+        }
+        val r1 = f.rootIb()
+        val r2 = f.childIb(r1)
+        val r3 = f.childIb(r2)
+        Seq(r1, r2, r3).foreach(f.history.applyInputBlock(_))
+        val t1 = f.spendBox(f.spendableBoxes(1))
+        val t2 = f.spendBox(t1.outputs.head)
+        val t3 = f.spendBox(t2.outputs.head)
+        f.history.applyInputBlockTransactions(r3.id, Seq(t3), f.state) shouldBe
+          (Seq.empty -> Seq.empty)
+        f.history.applyInputBlockTransactions(r2.id, Seq(t2), f.state) shouldBe
+          (Seq.empty -> Seq.empty)
+        f.history.applyInputBlockTransactions(r1.id, Seq(t1), f.state) shouldBe
+          (Seq(r1.id, r2.id, r3.id) -> Seq(a.id))
+        f.history.bestInputBlock() shouldBe Some(r3)
+        f.history.bestInputBlocksChain() shouldBe Seq(r3.id, r2.id, r1.id)
+      }
+    }
+  }
+
+  property("cached invalid competing bodies do not roll back the processed best chain") {
+    withInvalidBodyFixture { f =>
+      val a = f.rootIb()
+      val b = f.childIb(a)
+      Seq(a, b).foreach(f.history.applyInputBlock(_))
+      val txA = f.spendBox(f.spendableBoxes(0))
+      f.history.applyInputBlockTransactions(a.id, Seq(txA), f.state)
+      f.history.applyInputBlockTransactions(b.id, Seq(f.spendBox(txA.outputs.head)), f.state)
+      val r1 = f.rootIb()
+      val r2 = f.childIb(r1)
+      val r3 = f.childIb(r2)
+      Seq(r1, r2, r3).foreach(f.history.applyInputBlock(_))
+      f.history.applyInputBlockTransactions(r3.id, Seq(f.spendBox(f.spendableBoxes(2))), f.state)
+      f.history.applyInputBlockTransactions(r2.id, Seq(f.invalidTx), f.state)
+      f.history.applyInputBlockTransactions(r1.id, Seq(f.spendBox(f.spendableBoxes(1))), f.state) shouldBe
+        (Seq.empty -> Seq.empty)
+      f.history.bestInputBlock() shouldBe Some(b)
+      f.history.bestInputBlocksChain() shouldBe Seq(b.id, a.id)
     }
   }
 

@@ -2261,8 +2261,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlockTransactions(ib3c.id, txsC, us) // Try to apply to child when parent not processed
     // This should return empty because parent transaction is not processed yet
 
-    h.applyInputBlockTransactions(ib2c.id, txsC, us) // Apply to parent
-    // May or may not succeed depending on validation
+    h.applyInputBlockTransactions(ib2c.id, txsC, us) shouldBe (Seq(ib2c.id) -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib2c.id, ib1.id)
 
     h.applyInputBlockTransactions(ib3c.id, txsC, us) // Now apply to child
 
@@ -2303,7 +2303,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
       fork.chain should contain(ib1.id)
       fork.chain.length shouldBe >=(2) // At least 2 blocks (parent + one child)
     }
-    h.bestInputBlocksChain() shouldBe Seq(ib2a.id, ib1.id)
+    // C supplied the first valid child body; equal-depth A/B cannot displace it.
+    h.bestInputBlocksChain() shouldBe Seq(ib2c.id, ib1.id)
   }
 
   property("forks spanning across multiple ordering blocks") {
@@ -3262,7 +3263,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     val result = h.applyInputBlockTransactions(ib3.id, Seq.empty, us)
     result._1 shouldBe Seq(ib2.id, ib3.id)
-    result._2 shouldBe Seq.empty
+    result._2 shouldBe Seq(ib1.id)
 
     h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id)
   }
@@ -3955,6 +3956,72 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
         (Seq.empty -> Seq.empty)
       f.history.bestInputBlock() shouldBe Some(b)
       f.history.bestInputBlocksChain() shouldBe Seq(b.id, a.id)
+    }
+  }
+
+  property("invalid cached candidate cannot shadow a valid competing fork") {
+    for (reverseForkOrder <- Seq(false, true); equalDepth <- Seq(false, true)) {
+      withInvalidBodyFixture { f =>
+        val a = f.rootIb()
+        val b = f.childIb(a)
+        Seq(a, b).foreach(f.history.applyInputBlock(_))
+        val txA = f.spendBox(f.spendableBoxes(0))
+        f.history.applyInputBlockTransactions(a.id, Seq(txA), f.state)
+        f.history.applyInputBlockTransactions(b.id, Seq(f.spendBox(txA.outputs.head)), f.state)
+        val r = f.rootIb()
+        val x = f.childIb(r)
+        val x3 = f.childIb(x)
+        val x4 = f.childIb(x3)
+        val v = f.childIb(r)
+        val v3 = f.childIb(v)
+        val invalidBranch = if (equalDepth) Seq(x, x3) else Seq(x, x3, x4)
+        f.history.applyInputBlock(r)
+        val branches = if (reverseForkOrder) Seq(Seq(v, v3), invalidBranch)
+          else Seq(invalidBranch, Seq(v, v3))
+        branches.flatten.foreach(f.history.applyInputBlock(_))
+        val tr = f.spendBox(f.spendableBoxes(1))
+        val tv = f.spendBox(tr.outputs.head)
+        val tv3 = f.spendBox(tv.outputs.head)
+        f.history.applyInputBlockTransactions(x.id, Seq(f.invalidTx), f.state)
+        f.history.applyInputBlockTransactions(x3.id, Seq(f.invalidTx), f.state)
+        if (!equalDepth) f.history.applyInputBlockTransactions(x4.id, Seq(f.invalidTx), f.state)
+        f.history.applyInputBlockTransactions(v3.id, Seq(tv3), f.state)
+        f.history.applyInputBlockTransactions(v.id, Seq(tv), f.state)
+        f.history.applyInputBlockTransactions(r.id, Seq(tr), f.state) shouldBe
+          (Seq(r.id, v.id, v3.id) -> Seq(a.id, b.id))
+        f.history.bestInputBlock() shouldBe Some(v3)
+        f.history.bestInputBlocksChain() shouldBe Seq(v3.id, v.id, r.id)
+        f.candidateNamedParent(f.buildCandidate(Seq.empty)) shouldBe Some(v3.id)
+      }
+    }
+  }
+
+  property("extending forks prefer validated cached descendants over header length") {
+    for (invalidBody <- Seq(false, true); reverseForkOrder <- Seq(false, true)) {
+      withInvalidBodyFixture { f =>
+        val a = f.rootIb()
+        f.history.applyInputBlock(a)
+        val ta = f.spendBox(f.spendableBoxes(0))
+        f.history.applyInputBlockTransactions(a.id, Seq(ta), f.state)
+        val missing = f.childIb(a)
+        val b = f.childIb(a)
+        val c = f.childIb(b)
+        val d = f.childIb(b)
+        val d2 = f.childIb(d)
+        Seq(missing, b).foreach(f.history.applyInputBlock(_))
+        val branches = if (reverseForkOrder) Seq(d, d2, c) else Seq(c, d, d2)
+        branches.foreach(f.history.applyInputBlock(_))
+        val tb = f.spendBox(ta.outputs.head)
+        val tc = f.spendBox(tb.outputs.head)
+        if (invalidBody) f.history.applyInputBlockTransactions(d.id, Seq(f.invalidTx), f.state)
+        f.history.applyInputBlockTransactions(c.id, Seq(tc), f.state) shouldBe
+          (Seq.empty -> Seq.empty)
+        f.history.applyInputBlockTransactions(b.id, Seq(tb), f.state) shouldBe
+          (Seq(b.id, c.id) -> Seq.empty)
+        f.history.bestInputBlock() shouldBe Some(c)
+        f.history.bestInputBlocksChain() shouldBe Seq(c.id, b.id, a.id)
+        f.candidateNamedParent(f.buildCandidate(Seq.empty)) shouldBe Some(c.id)
+      }
     }
   }
 

@@ -454,20 +454,16 @@ trait InputBlocksProcessor extends ScorexLogging {
      * to continue on the current best chain or switch to a longer competing chain.
      *
      * Algorithm:
-     * 1. Determine if a fork switch is needed by comparing the longest chain with the best chain
-     * 2. If a fork switch is needed:
-     *    - Identify the common ancestor between current and new best chains
-     *    - Rollback processed blocks from the old chain
-      *    - Apply transactions from the new best chain
-      * 3. If no fork switch is needed but the block belongs to the best chain:
-      *    - Process the block on the current best chain
-      * 4. Return the sequence of applied blocks and rolled back blocks
-      *
-      * Note: Sequential spending within the same input block is supported.
-      * applyTransactions pre-populates createdOutputs with all outputs from the batch,
-      * so transactions can spend outputs created by other transactions in the same block.
-      *
-      * @param ib The input block info to apply transactions to
+     * 1. Find forks whose available bodies can improve the current processed depth.
+     * 2. Validate their prefixes and select the deepest successful result.
+     * 3. Share validated common prefixes and their costs with sibling forks.
+     * 4. Return forward and rollback blocks relative to the old processed chain.
+     *
+     * Note: Sequential spending within the same input block is supported.
+     * applyTransactions pre-populates createdOutputs with all outputs from the batch,
+     * so transactions can spend outputs created by other transactions in the same block.
+     *
+     * @param ib The input block info to apply transactions to
      * @param txs The transactions to apply to the input block
      * @param state The current Ergo state for transaction validation
      * @return A tuple containing:
@@ -535,157 +531,66 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       }
 
-      // At the best processed depth, prefer the longest fork extending the current best tip
-      // whose next unprocessed block is the arriving one ("first complete body wins").
-      val currentBestDepth = this.bestDepth
-      val currentBestTip   = this.bestTip
-      var extendingBestLen   = -1
-      var extendingBestIndex = -1
-      (0 until forks.length).foreach { c =>
-        val f = forks(c)
-        if (f.processedIndex == currentBestDepth &&
-            f.tip == currentBestTip &&
-            f.firstToComplete().contains(ib.id) &&
-            f.chain.length > extendingBestLen) {
-          extendingBestLen   = f.chain.length
-          extendingBestIndex = c
-        }
-      }
+      val currentBestDepth = bestDepth
+      val currentBestTip = bestTip
+      val currentChain = bestChain
 
-      // Determine the best fork index (prefer processed blocks over longest chain)
-      val bestIndex = if (extendingBestIndex != -1) {
-        extendingBestIndex
-      } else if (this.bestIndex == -1) {
-        this.longestIndex
-      } else {
-        this.bestIndex
-      }
-      if (bestIndex == -1) {
-        log.debug("No best fork found, returning empty progress")
-        return Seq.empty -> Seq.empty
-      }
-
-      // Header-only suffixes must not prevent another fork's complete prefix from
-      // competing. Count contiguous available bodies, then validate them before
-      // reporting any rollback or replacing the current best fork.
-      var switchIndex = -1
-      var switchDepth = currentBestDepth
-      forks.indices.foreach { idx =>
+      // Available bodies bound possible progress, but only validated depth can win.
+      // Examine every relevant fork: an invalid longer candidate must not shadow
+      // a shorter valid one, including siblings sharing the arriving block.
+      val candidates = forks.indices.flatMap { idx =>
         val f = forks(idx)
-        if (idx != bestIndex && f.depthOf(ib.id) > f.processedIndex) {
+        if (f.depthOf(ib.id) > f.processedIndex) {
           var depth = f.processedIndex
           while (depth + 1 < f.chain.length &&
                  inputBlockTransactions.contains(f.chain(depth + 1))) {
             depth += 1
           }
-          if (depth > switchDepth) {
-            switchIndex = idx
-            switchDepth = depth
+          if (depth > currentBestDepth) Some(idx -> depth) else None
+        } else None
+      }.sortBy { case (idx, depth) =>
+        val extendsBest = forks(idx).tip == currentBestTip
+        (-depth, if (extendsBest) 0 else 1, idx)
+      }
+
+      var selected = Option.empty[InputBlocksChain]
+      var selectedDepth = currentBestDepth
+      candidates.foreach { case (idx, availableDepth) =>
+        // Once a deeper prefix is validated, shorter/equal candidates cannot win.
+        if (availableDepth > selectedDepth) {
+          val f = forks(idx)
+          f.firstToComplete().foreach { nextId =>
+            val nextIb = inputBlockRecords(nextId)
+            val nextTxs = if (nextId == ib.id) txs else {
+              inputBlockTransactions(nextId).flatMap { tid =>
+                Option(transactionsCache.getIfPresent(tid))
+              }
+            }
+            val r = applicationStep(nextIb, nextTxs, f -> Seq.empty)
+            if (r._1.processedIndex > selectedDepth) {
+              selected = Some(r._1)
+              selectedDepth = r._1.processedIndex
+            }
           }
         }
       }
 
-      if (extendingBestIndex == -1 && switchIndex != -1) { // forking case
-        log.info(s"Performing fork switch from fork ${bestIndex} to fork ${switchIndex}")
-
-        val currentFork = forks(bestIndex)
-        val newFork = forks(switchIndex)
-
-        // Calculate which blocks need to be rolled back
-        val rollbackInputBlocks = {
-          var commonIdx = -1  // Index of the common ancestor
-          (0 until currentFork.chain.length).foreach { idx =>
-            // Find the highest index that exists in both chains and is processed in the new chain
-            if (idx < newFork.chain.length &&
-                currentFork.chain(idx) == newFork.chain(idx) &&
-                idx <= newFork.processedIndex) {
-              commonIdx = idx
-            }
+      selected match {
+        case Some(winner) =>
+          val validated = winner.chain.take(winner.processedIndex + 1)
+          // Copy actual validated costs only along a common prefix. A descendant
+          // that diverges from the winner must still validate its own body.
+          val updatedForks = forks.map { f =>
+            val commonLength = f.chain.zip(validated).takeWhile { case (a, b) => a == b }.length
+            if (commonLength > f.processedBlocks.length) {
+              InputBlocksChain(f.chain, winner.processedBlocks.take(commonLength))
+            } else f
           }
-          if (commonIdx == currentFork.processedIndex) {
-            Seq.empty  // Nothing to roll back if common ancestor is at the same level or higher
-          } else {
-            // Extract the blocks that need to be rolled back (from common ancestor + 1 to processed tip)
-            val rolledBack = currentFork.chain.slice(commonIdx + 1, currentFork.processedIndex + 1)
-            log.info(s"Fork switch: rolling back ${rolledBack.length} input blocks from fork ${bestIndex}")
-            rolledBack
-          }
-        }
-
-        // Process the next block in the new best chain
-        val ibId = newFork.chain(newFork.processedIndex + 1)  // Next unprocessed block in new chain
-        val ib   = inputBlockRecords(ibId)
-        val txIds = inputBlockTransactions(ibId)
-        val txs = mutable.ArrayBuffer[ErgoTransaction]()
-        cfor(0)(_ < txIds.length, _ + 1) { j =>
-          val tid = txIds(j)
-          val tx = transactionsCache.getIfPresent(tid)
-          if (tx != null) {
-            txs += tx
-          } else {
-            log.warn(s"Transaction $tid not found in cache during fork switch (expired or evicted)")
-          }
-        }
-        val r = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
-
-        if (r._2.nonEmpty && r._1.processedIndex > currentBestDepth) {
-          // Only a validated prefix deeper than the current best can win.
-          var updTree  = new InputBlocksTree(forks.updated(switchIndex, r._1))
-          val updForks = updTree.forks
-
-          // Register completion for any other forks that were waiting for this block
-          (0 until updForks.length).foreach { idx =>
-            val f = updForks(idx)
-            if (f.firstToComplete().contains(ib.id)) {
-              // todo: pass real cost of input block instead of costDelta = 0
-              f.registerCompletion(ib.id, costDelta = 0) match {
-                case Success(ibc) =>
-                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
-                case Failure(e) =>
-                  log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
-              }
-            }
-          }
-          inputBlockTrees.put(ib.header.parentId, updTree) // Update global tree storage
-          log.info(s"Fork switch completed: ${r._2.length} blocks rolled back, new best fork has ${r._1.processedIndex + 1} processed blocks")
-          r._2 -> rollbackInputBlocks  // Return forward progress and rollback blocks
-        } else {
-          log.warn("Progress is empty in processInputBlockTransactions during fork switch")
+          val commonLength = currentChain.zip(validated).takeWhile { case (a, b) => a == b }.length
+          inputBlockTrees.put(ib.header.parentId, InputBlocksTree(updatedForks))
+          validated.drop(commonLength) -> currentChain.drop(commonLength)
+        case None =>
           Seq.empty -> Seq.empty
-        }
-      } else if (forks(bestIndex).firstToComplete().contains(ib.id)) { // no forking - linear processing
-        log.debug(s"Processing input block ${ib.id} on best fork ${bestIndex}")
-        val f = forks(bestIndex)
-        val r = applicationStep(ib, txs, (f -> Seq.empty))  // Process the block on the current best chain
-
-        if (r._2.nonEmpty) {
-          // Update the tree with the processed chain
-          var updTree  = new InputBlocksTree(forks.updated(bestIndex, r._1))
-          val updForks = updTree.forks
-
-          // Register completion for any other forks that were waiting for this block
-          (0 until updForks.length).foreach { idx =>
-            val f = updForks(idx)
-            if (f.firstToComplete().contains(ib.id)) {
-              // todo: pass real cost of input block instead of costDelta = 0
-              f.registerCompletion(ib.id, costDelta = 0) match {
-                case Success(ibc) =>
-                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
-                case Failure(e) =>
-                  log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
-              }
-            }
-          }
-          inputBlockTrees.put(ib.header.parentId, updTree) // Update global tree storage
-          log.debug(s"Input block ${ib.id} processed successfully, ${r._2.length} blocks added to chain")
-          r._2 -> Seq.empty  // Return forward progress, no rollback since no fork switch
-        } else {
-          log.warn("Progress is empty in processInputBlockTransactions during linear processing")
-          Seq.empty -> Seq.empty
-        }
-      } else {
-        log.debug(s"No forking and no non-forking for input block ${ib.id}, best depth: ${bestDepth}, longest depth: ${longestDepth.getOrElse(0)}")
-        Seq.empty -> Seq.empty
       }
     }
   }

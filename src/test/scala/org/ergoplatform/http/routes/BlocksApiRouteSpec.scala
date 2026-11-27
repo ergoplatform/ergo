@@ -143,4 +143,37 @@ class BlocksApiRouteSpec
     }
   }
 
+  it should "report bestFullBlockOpt as bestOrdering in bestInputBlock and bestInputChain when headers lead full blocks" in {
+    import akka.actor.{Actor, Props}
+    import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
+    import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
+
+    val customHistory = generateHistory()
+    val localChain    = genChain(3, customHistory)
+    applyChain(customHistory, localChain.take(2))
+    customHistory.append(localChain(2).header).get
+
+    val bestFullId   = customHistory.bestFullBlockOpt.value.header.id
+    val bestHeaderId = customHistory.bestHeaderOpt.value.id
+    bestHeaderId should not equal bestFullId
+
+    val customReaders = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetDataFromHistory(f) =>
+          sender() ! f(customHistory)
+      }
+    }))
+    val customRoute = BlocksApiRoute(nodeViewRef, customReaders, settings).route
+
+    Get(prefix + "/bestInputBlock") ~> customRoute ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.get[String]("bestOrdering").toOption shouldBe Some(bestFullId)
+    }
+
+    Get(prefix + "/bestInputChain") ~> customRoute ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.get[String]("bestOrdering").toOption shouldBe Some(bestFullId)
+    }
+  }
+
 }

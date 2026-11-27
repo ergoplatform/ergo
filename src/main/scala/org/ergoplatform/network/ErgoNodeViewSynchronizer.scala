@@ -1963,14 +1963,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         viewHolderRef ! ProcessOrderingBlock(oba)
       } else {
         // todo: request full block for now, see todo notes above
-        val ext = Extension(oba.header.id, oba.extensionFields)
-        viewHolderRef ! ModifiersFromRemote(Seq(ext))
-        val status = deliveryTracker.status(
-          oba.header.transactionsId, BlockTransactions.modifierTypeId, Seq(hr)
-        )
-        if (status == ModifiersStatus.Unknown) {
-          log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
-          requestBlockSection(BlockTransactions.modifierTypeId, Array(oba.header.transactionsId), remote)
+        val headerStatus = deliveryTracker.status(oba.header.id, Header.modifierTypeId, Seq(hr))
+        if (headerStatus != ModifiersStatus.Invalid) {
+          if (headerStatus == ModifiersStatus.Unknown) {
+            deliveryTracker.setReceivedDirectly(oba.header.id, Header.modifierTypeId, remote)
+            viewHolderRef ! ModifiersFromRemote(Seq(oba.header))
+          } else if (headerStatus == ModifiersStatus.Requested) {
+            deliveryTracker.setReceived(oba.header.id, Header.modifierTypeId, remote)
+            viewHolderRef ! ModifiersFromRemote(Seq(oba.header))
+          }
+          val ext = Extension(oba.header.id, oba.extensionFields)
+          val extStatus = deliveryTracker.status(ext.id, Extension.modifierTypeId, Seq(hr))
+          if (extStatus == ModifiersStatus.Unknown) {
+            deliveryTracker.setReceivedDirectly(ext.id, Extension.modifierTypeId, remote)
+            viewHolderRef ! ModifiersFromRemote(Seq(ext))
+          } else if (extStatus == ModifiersStatus.Requested) {
+            deliveryTracker.setReceived(ext.id, Extension.modifierTypeId, remote)
+            viewHolderRef ! ModifiersFromRemote(Seq(ext))
+          }
+          val status = deliveryTracker.status(
+            oba.header.transactionsId, BlockTransactions.modifierTypeId, Seq(hr)
+          )
+          if (status == ModifiersStatus.Unknown) {
+            log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
+            requestBlockSection(BlockTransactions.modifierTypeId, Array(oba.header.transactionsId), remote)
+          }
         }
       }
     } else {
@@ -2064,16 +2081,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             } else if (modifierTypeId == InputBlockTypeId.value ||
                         modifierTypeId == InputBlockTransactionIdsTypeId.value ||
                         modifierTypeId == OrderingBlockAnnouncementTypeId.value) {
-              deliveryTracker.setUnknown(modifierId, modifierTypeId)
-              if (modifierTypeId == InputBlockTypeId.value && checksDone < 2) {
-                log.info(s"re-requesting input block $modifierId")
-                requestInputBlock(modifierId, peer)
+              val subBlockPeers = SubBlocksFilter.filter(syncTracker.knownPeers()).filterNot(_ == peer).toSeq
+              val newPeer = if (subBlockPeers.nonEmpty) {
+                subBlockPeers(scala.util.Random.nextInt(subBlockPeers.size))
               } else {
-                log.info(s"re-requesting input txs $modifierId")
-                hr.getInputBlock(modifierId).foreach { ibi =>
-                  requestInputBlockTransactionIds(ibi, peer)
-                }
+                peer
               }
+              log.info(s"Rescheduling request for $modifierTypeId : $modifierId , new peer $newPeer")
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+              requestBlockSection(modifierTypeId, Seq(modifierId), newPeer, checksDone)
             } else {
               // randomly choose a peer for another block sections download attempt
               val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
@@ -2521,11 +2537,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case (_: InputBlockMessageSpec.type, subBlockInfo: InputBlockAnnouncement, remote) =>
       processInputBlock(subBlockInfo, hr, mp, remote, usrOpt)
     case (_: InputBlockTransactionIdsMessageSpec.type, transactionIds: InputBlockTransactionIdsData, remote) =>
-      processInputBlockTransactionIds(transactionIds, mp, remote)
+      if (usrOpt.isDefined) {
+        processInputBlockTransactionIds(transactionIds, mp, remote)
+      } else {
+        log.warn(s"Received input block transaction IDs for ${transactionIds.inputBlockId} in digest mode, ignoring")
+        clearRequestedIfFromSupplier(transactionIds.inputBlockId, InputBlockTransactionIdsTypeId.value, remote)
+      }
     case (_: InputBlockTransactionsRequestMessageSpec.type, req: InputBlockTransactionsRequest, remote) =>
       processInputBlockTransactionsRequest(req, hr, remote)
     case (_: InputBlockTransactionsMessageSpec.type, transactions: InputBlockTransactionsData, remote) =>
-      processInputBlockTransactions(transactions, hr, remote)
+      if (usrOpt.isDefined) {
+        processInputBlockTransactions(transactions, hr, remote)
+      } else {
+        log.warn(s"Received input block transactions for ${transactions.inputBlockId} in digest mode, ignoring")
+      }
     case (_: OrderingBlockAnnouncementMessageSpec.type, oba: OrderingBlockAnnouncement, remote) =>
       processOrderingBlockAnnouncement(oba, hr, remote)
   }

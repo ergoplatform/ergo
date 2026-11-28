@@ -426,8 +426,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! txTry
 
     case ExtractHints(tx, real, simulated, boxesToSpendOpt, dataBoxesOpt) =>
-      val bag = ergoWalletService.extractHints(state, tx, real, simulated, boxesToSpendOpt, dataBoxesOpt)
-      sender() ! ExtractHintsResult(bag)
+      Try(ergoWalletService.extractHints(state, tx, real, simulated, boxesToSpendOpt, dataBoxesOpt)) match {
+        case Success(bag) => sender() ! ExtractHintsResult(bag)
+        case Failure(e) => sender() ! akka.actor.Status.Failure(e)
+      }
 
     case DeriveKey(encodedPath) =>
       ergoWalletService.deriveKeyFromPath(state, encodedPath, ergoAddressEncoder) match {

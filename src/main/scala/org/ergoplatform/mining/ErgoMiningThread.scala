@@ -5,6 +5,7 @@ import akka.pattern.StatusReply
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -24,6 +25,14 @@ class ErgoMiningThread(
 
   private val powScheme = ergoSettings.chainSettings.powScheme
   private val NonceStep = 1000
+  private var mineCmdPending = false
+
+  private def enqueueMineCmdIfIdle(): Unit = {
+    if (!mineCmdPending) {
+      mineCmdPending = true
+      self ! MineCmd
+    }
+  }
 
   override def preStart(): Unit = {
     log.info(s"Starting miner thread: ${self.path.name}")
@@ -40,10 +49,11 @@ class ErgoMiningThread(
     log.info(s"Stopping miner thread: ${self.path.name}")
 
   override def receive: Receive = {
-    case StatusReply.Success(Candidate(candidateBlock, _, _)) =>
+    case StatusReply.Success(candidate: Candidate) =>
       log.info(s"Initiating block mining")
-      context.become(mining(nonce = 0, candidateBlock, solvedBlocksCount = 0))
-      self ! MineCmd
+      context.become(mining(nonce = 0, candidateBlock = candidate.candidateBlock,
+        workMsg = candidate.externalVersion.msg.clone(), solvedBlocksCount = 0))
+      enqueueMineCmdIfIdle()
     case StatusReply.Error(ex) =>
       log.error(s"Preparing candidate did not succeed", ex)
   }
@@ -51,20 +61,24 @@ class ErgoMiningThread(
   def mining(
     nonce: Int,
     candidateBlock: CandidateBlock,
+    workMsg: Array[Byte],
     solvedBlocksCount: Int
   ): Receive = {
-    case StatusReply.Success(Candidate(cb, _, _)) =>
-      // if we get new candidate instead of a cached one, mine it
-      if (cb.timestamp != candidateBlock.timestamp) {
-        context.become(mining(nonce = 0, cb, solvedBlocksCount))
-        self ! MineCmd
+    case StatusReply.Success(candidate: Candidate) =>
+      // A new candidate can have the same timestamp but different PoW work.
+      if (!java.util.Arrays.equals(candidate.externalVersion.msg, workMsg)) {
+        log.info(s"Switching block mining work to msg ${Base16.encode(candidate.externalVersion.msg)}")
+        context.become(mining(nonce = 0, candidateBlock = candidate.candidateBlock,
+          workMsg = candidate.externalVersion.msg.clone(), solvedBlocksCount = solvedBlocksCount))
+        enqueueMineCmdIfIdle()
       }
     case StatusReply.Error(ex) =>
       log.error(s"Accepting solution or preparing candidate did not succeed", ex)
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
-      context.become(mining(nonce, candidateBlock, solvedBlocksCount + 1))
+      context.become(mining(nonce, candidateBlock, workMsg, solvedBlocksCount + 1))
     case MineCmd =>
+      mineCmdPending = false
       val lastNonceToCheck = nonce + NonceStep
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck) match {
         case Some(newBlock) =>
@@ -72,8 +86,8 @@ class ErgoMiningThread(
           candidateGenerator ! newBlock.header.powSolution
         case None =>
           log.info(s"Trying nonce $lastNonceToCheck")
-          context.become(mining(lastNonceToCheck, candidateBlock, solvedBlocksCount))
-          self ! MineCmd
+          context.become(mining(lastNonceToCheck, candidateBlock, workMsg, solvedBlocksCount))
+          enqueueMineCmdIfIdle()
       }
     case GetSolvedBlocksCount =>
       sender() ! SolvedBlocksCount(solvedBlocksCount)
@@ -83,7 +97,7 @@ class ErgoMiningThread(
 
 object ErgoMiningThread {
 
-  case object MineCmd
+  private case object MineCmd
   case object GetSolvedBlocksCount // metric just for testing purposes for now
   case class SolvedBlocksCount(count: Int)
 

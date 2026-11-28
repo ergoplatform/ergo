@@ -187,6 +187,15 @@ jobs:
          with:
            java-version: ${{ matrix.java }}
 
+       # sbt-docker 1.11 tags the exported config digest. It needs the classic
+       # image store; containerd stores the manifest digest instead.
+       - name: Set up Docker for sbt-docker image tagging
+         uses: docker/setup-docker-action@v4
+         with:
+           set-host: true
+           daemon-config: |
+             { "features": { "containerd-snapshotter": false } }
+
        - name: Runs it node tests
          run: |
            cd it

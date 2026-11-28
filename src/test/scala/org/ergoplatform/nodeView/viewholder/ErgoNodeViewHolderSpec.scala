@@ -1286,7 +1286,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
-  private val t41 = TestCase("ProcessInputBlock uses pre-existing transactions from history") { fixture =>
+  private val t41 = TestCase("ProcessInputBlockTransactions requires an announcement before caching bodies") { fixture =>
     import fixture._
     if (stateType == Utxo && verifyTransactions) {
       val (us, bh) = createUtxoState(fixture.settings)
@@ -1307,16 +1307,23 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
         None
       )
 
-      // Pre-seed transactions by sending ProcessInputBlockTransactions first
+      // Unknown bodies are ignored rather than cached without an announcement.
       subscribeEvents(classOf[NewBestInputBlock])
       val txData = InputBlockTransactionsData(inputBlock.id, Seq.empty)
       nodeViewHolderRef ! ProcessInputBlockTransactions(txData)
 
-      // No input block record exists yet, so no NewBestInputBlock should be published
+      // No input block record exists yet, so no NewBestInputBlock should be published.
       testProbe.expectNoMessage(1.second)
+      getHistory.getInputBlockTransactions(inputBlock.id) shouldBe None
 
-      // Now send ProcessInputBlock - it should find pre-existing transactions and publish NewBestInputBlock
+      // Registering the announcement alone must not resurrect the rejected body.
       nodeViewHolderRef ! ProcessInputBlock(inputBlock, dummyPeer)
+      testProbe.expectNoMessage(1.second)
+      getHistory.getInputBlock(inputBlock.id) should not be None
+      getHistory.getInputBlockTransactions(inputBlock.id) shouldBe None
+
+      // The same body is accepted once its announcement is known.
+      nodeViewHolderRef ! ProcessInputBlockTransactions(txData)
 
       val newBestMsg = testProbe.fishForMessage(5.seconds) {
         case n: NewBestInputBlock => n.idOpt.contains(inputBlock.id)

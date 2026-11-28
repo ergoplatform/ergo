@@ -234,44 +234,41 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   }
 
   it should "let multiple miners compete" in new TestKit(ActorSystem()) {
-    val testProbe = new TestProbe(system)
-    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+    try {
+      val testProbe = new TestProbe(system)
+      val replyProbe = new TestProbe(system)
+      system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
-    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+      val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+      val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
-    val candidateGenerator: ActorRef =
-      CandidateGenerator(
-        defaultMinerSecret.publicImage,
-        readersHolderRef,
-        viewHolderRef,
-        defaultSettings
-      )
+      val candidateGenerator: ActorRef =
+        CandidateGenerator(
+          defaultMinerSecret.publicImage,
+          readersHolderRef,
+          viewHolderRef,
+          defaultSettings
+        )
 
-    val m1 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
-    val m2 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
-    val m3 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
+      val m1 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
+      val m2 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
+      val m3 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
 
-    // after applying solution from miner
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+      // after applying solution from miner
+      testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+      testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+      testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
-    m1.tell(ErgoMiningThread.GetSolvedBlocksCount, testProbe.ref)
-
-    val m1Count =
-      testProbe.expectMsgClass(50.millis, classOf[ErgoMiningThread.SolvedBlocksCount])
-    m2.tell(ErgoMiningThread.GetSolvedBlocksCount, testProbe.ref)
-
-    val m2Count =
-      testProbe.expectMsgClass(50.millis, classOf[ErgoMiningThread.SolvedBlocksCount])
-    m3.tell(ErgoMiningThread.GetSolvedBlocksCount, testProbe.ref)
-
-    val m3Count =
-      testProbe.expectMsgClass(50.millis, classOf[ErgoMiningThread.SolvedBlocksCount])
-
-    List(m1Count, m2Count, m3Count).map(_.count).sum should be >= 3
-    system.terminate()
+      // Applied-block events and solution acknowledgements come from different actors.
+      // Wait for the unchanged count invariant using a probe isolated from block events.
+      eventually(timeout(newBlockDelay), interval(100.millis)) {
+        val counts = Seq(m1, m2, m3).map { miner =>
+          miner.tell(ErgoMiningThread.GetSolvedBlocksCount, replyProbe.ref)
+          replyProbe.expectMsgClass(candidateGenDelay, classOf[ErgoMiningThread.SolvedBlocksCount]).count
+        }
+        counts.sum should be >= 3
+      }
+    } finally TestKit.shutdownActorSystem(system)
   }
 
   it should "cache candidate until newly mined block is applied" in new TestKit(

@@ -124,7 +124,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     }
   }
 
-  def postBlocksR: Route = (post & entity(as[ErgoFullBlock]) & withAuth) { block =>
+  def postBlocksR: Route = (pathEndOrSingleSlash & post &
+    withAuth & entity(as[ErgoFullBlock])) { block =>
     if (ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess) {
       log.info(s"Received a new valid block through API: ${block.id}")
 

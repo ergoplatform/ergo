@@ -1,5 +1,6 @@
 package scorex.core.api.http
 
+import akka.http.scaladsl.model.headers.Allow
 import akka.http.scaladsl.server._
 import org.ergoplatform.http.api.ApiError
 
@@ -12,7 +13,8 @@ object ApiRejectionHandler {
     }
     .handle {
       case AuthorizationFailedRejection =>
-        ApiError.Forbidden("The supplied authentication is not authorized to access this resource")
+        ApiError.Forbidden(
+          "The supplied authentication is not authorized to access this resource")
     }
     .handle {
       case MalformedRequestContentRejection(msg, _) =>
@@ -31,6 +33,14 @@ object ApiRejectionHandler {
         ApiError.BadRequest("Request entity expected but not supplied")
     }
     .handle { case ValidationRejection(msg, _) => ApiError.BadRequest(msg) }
+    .handleAll[MethodRejection] { rejections =>
+      val methods = rejections.map(_.supported)
+      val names = methods.map(_.name).mkString(", ")
+      Directives.respondWithHeader(Allow(methods)) {
+        ApiError.MethodNotAllowed(
+          s"HTTP method not allowed, supported methods: $names")
+      }
+    }
     .handle { case x => ApiError.InternalError(s"Unhandled rejection: $x") }
     .handleNotFound { ApiError.BadRequest("The requested resource/endpoint could not be found.") }
     .result()

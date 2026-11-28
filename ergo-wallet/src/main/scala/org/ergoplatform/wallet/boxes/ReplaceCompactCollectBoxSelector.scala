@@ -100,7 +100,10 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
     val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.inputBoxes.contains(b))
 
     val boxes = bsr.inputBoxes ++ dust
-    calcChange(boxes, targetBalance, targetAssets).mapRight(changeBoxes => selectionResultWithEip27Output(boxes, changeBoxes))
+    calcChange(boxes, targetBalance, targetAssets).fold(
+      _ => Right(bsr),
+      changeBoxes => Right(selectionResultWithEip27Output(boxes, changeBoxes))
+    )
   }
 
   protected[boxes] def compress[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
@@ -114,7 +117,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
       boxes.filter(!_.tokens.keySet.exists(tid => targetAssetsKeys.contains(tid)))
         .sortBy(b => BoxSelector.valueOf(b, reemissionDataOpt))
 
-    if (diff >= BoxSelector.valueOf(sortedBoxesToThrowAway.head, reemissionDataOpt)) {
+    if (sortedBoxesToThrowAway.headOption.exists(b => diff >= BoxSelector.valueOf(b, reemissionDataOpt))) {
       var thrownValue = 0L
       val thrownBoxes = sortedBoxesToThrowAway.takeWhile { b =>
         thrownValue = thrownValue + BoxSelector.valueOf(b, reemissionDataOpt)

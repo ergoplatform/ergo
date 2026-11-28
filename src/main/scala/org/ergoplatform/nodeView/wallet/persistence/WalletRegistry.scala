@@ -255,17 +255,29 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param scanResults - block scan data (outputs created and spent along with corresponding transactions)
     * @param blockId     - block identifier
     * @param blockHeight - block height
+    * @param maturedBoxes - preceding versions of mining rewards resolved in scanResults.outputs
     */
-  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
+  def updateOnBlock(scanResults: ScanResults,
+                    blockId: ModifierId,
+                    blockHeight: Int,
+                    maturedBoxes: Seq[TrackedBox] = Seq.empty): Try[Unit] = {
 
+    // Resolve mining associations in the same checkpoint as this block's outputs and spends.
+    val bag0 = removeBoxes(KeyValuePairsBag.empty, maturedBoxes)
     // first, put newly created outputs and related transactions into key-value bag
     cache ++= scanResults.outputs.map(b => b.boxId -> b)
-    val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
+    val bag1 = putBoxes(bag0, scanResults.outputs)
     val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
     // process spent boxes
     val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
     val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
+
+    // A shared reward can already belong to payments; its assets are already in the digest.
+    val previouslyWalletBoxIds = maturedBoxes.filter(_.scans.contains(PaymentsScanId)).map(_.boxId).toSet
+    val receivedWalletBoxes = scanResults.outputs.filter { tb =>
+      tb.scans.contains(PaymentsScanId) && !previouslyWalletBoxIds.contains(tb.boxId)
+    }
 
     // and update wallet digest
     updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
@@ -279,7 +291,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
+      val receivedTokensAmt = receivedWalletBoxes
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -301,7 +313,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
           }
         }
 
-      val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
+      val receivedAmt = receivedWalletBoxes.map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
         Success(WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq))
